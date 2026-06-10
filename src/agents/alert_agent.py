@@ -95,7 +95,7 @@ class AlertAgent:
         """
         Gera um alerta estruturado a partir de informações extraídas
         """
-        alert_id = f"ALR-{datetime.now().strftime('%Y%m%d%H%M%S')}"
+        alert_id = f"ALR-{datetime.now().strftime('%Y%m%d%H%M%S%f')}"
         
         # Determina prioridade
         priority = self._determine_priority(extracted_info)
@@ -141,6 +141,9 @@ class AlertAgent:
         if deadline:
             delta = deadline - datetime.now()
             days = delta.days
+
+            if days < 0:
+                return AlertPriority.LOW
             
             if days < 7 or impact_score > 0.9:
                 return AlertPriority.CRITICAL
@@ -153,10 +156,12 @@ class AlertAgent:
 
     def _generate_summary(self, info: Dict[str, Any]) -> str:
         """
-        TODO: Implementar sumarização customizada
-        - Formato: "O {regulador} {ação} {tema} ({deadline})"
-        - Exemplo: "O BCB requer autenticação MFA em plataformas de pagamento (prazo: 31/12/2024)"
+        Usa resumo extraído pelo Analysis Agent/LLM quando disponível.
         """
+        extracted_summary = info.get('summary', '')
+        if extracted_summary:
+            return extracted_summary
+
         template = "Alerta: {title} - Regulador: {body}"
         return template.format(
             title=info.get('title', 'Alteração regulatória'),
@@ -181,11 +186,12 @@ class AlertAgent:
 
     def _generate_recommendations(self, info: Dict[str, Any]) -> List[str]:
         """
-        TODO: Implementar geração de recomendações iniciais
-        - Baseado em tipo de obrigação
-        - Recomendações genéricas por setor
-        - Formato: ação inicial para triagem
+        Usa recomendações vindas da análise e aplica fallback simples.
         """
+        extracted_recommendations = info.get('recommendations', [])
+        if extracted_recommendations:
+            return extracted_recommendations
+
         recommendations = []
         
         activities = info.get('affected_activities', [])
@@ -226,6 +232,15 @@ class AlertAgent:
 ║ 🏷️  TIPO:             {alert.document_type:<50}
 ║ ⚠️  PRIORIDADE:       {alert.priority.value:<50}
 ║
+║ 🧾 RESUMO:
+"""
+        output += self._format_bulleted_text(alert.summary, width=74, prefix="║    ")
+
+        if alert.impact_assessment:
+            output += "║\n║ 📊 IMPACTO:\n"
+            output += self._format_bulleted_text(alert.impact_assessment, width=74, prefix="║    ")
+
+        output += f"""║
 ║ 📋 ATIVIDADES AFETADAS:
 """
         for activity in alert.affected_activities:
@@ -233,7 +248,11 @@ class AlertAgent:
         
         output += f"║\n║ 📌 OBRIGAÇÕES:\n"
         for obligation in alert.obligations[:3]:  # Primeiras 3
-            output += f"║    • {obligation[:70]}\n"
+            output += self._format_list_item(obligation, width=70)
+
+        output += f"║\n║ ✅ RECOMENDAÇÕES:\n"
+        for recommendation in (alert.recommendations or [])[:3]:
+            output += self._format_list_item(recommendation, width=70)
         
         if alert.implementation_deadline:
             output += f"║\n║ ⏰ PRAZO: {alert.implementation_deadline.strftime('%d/%m/%Y')}"
@@ -247,6 +266,38 @@ class AlertAgent:
         output += f"╚{'═' * 80}╝\n"
         
         return output
+
+    def _format_bulleted_text(self, text: str, width: int = 74, prefix: str = "║    ") -> str:
+        """Quebra texto longo em linhas curtas para o display em console."""
+        if not text:
+            return f"{prefix}(não informado)\n"
+
+        words = text.split()
+        lines = []
+        current = ""
+        for word in words:
+            candidate = f"{current} {word}".strip()
+            if len(candidate) > width and current:
+                lines.append(current)
+                current = word
+            else:
+                current = candidate
+        if current:
+            lines.append(current)
+
+        return "".join(f"{prefix}{line}\n" for line in lines)
+
+    def _format_list_item(self, text: str, width: int = 70) -> str:
+        """Formata item de lista preservando texto longo."""
+        if not text:
+            return "║    • (não informado)\n"
+
+        wrapped = self._format_bulleted_text(text, width=width, prefix="║      ")
+        lines = wrapped.splitlines()
+        if not lines:
+            return "║    • (não informado)\n"
+        lines[0] = lines[0].replace("║      ", "║    • ", 1)
+        return "\n".join(lines) + "\n"
 
     def batch_generate_alerts(self, analyses: List[Dict[str, Any]]) -> List[StructuredAlert]:
         """Gera alertas em lote"""
@@ -272,11 +323,10 @@ class AlertAgent:
 
     def export_alerts(self, alerts: List[StructuredAlert], format: str = "json") -> str:
         """
-        TODO: Implementar exportação em múltiplos formatos
-        - JSON: para sistemas automatizados
-        - PDF: para relatórios
-        - CSV: para planilhas
-        - HTML: para portal
+        Exporta alertas.
+
+        Implementado: JSON.
+        Pendentes: CSV para planilhas, HTML para portal e PDF para relatorios.
         """
         if format == "json":
             return json.dumps(

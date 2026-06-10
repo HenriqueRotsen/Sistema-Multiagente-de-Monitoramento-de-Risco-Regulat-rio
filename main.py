@@ -1,6 +1,7 @@
 """
 Main orchestrator - Coordena os 3 agentes do sistema
 """
+from dataclasses import asdict
 import logging
 from typing import List, Dict, Any
 from datetime import datetime
@@ -8,6 +9,12 @@ from datetime import datetime
 from src.agents.monitor_agent import MonitorAgent
 from src.agents.analysis_agent import AnalysisAgent
 from src.agents.alert_agent import AlertAgent, StructuredAlert
+from src.utils.llm_integration import RegulatoryLLM
+
+try:
+    from dotenv import load_dotenv
+except ImportError:  # pragma: no cover
+    load_dotenv = None
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -25,8 +32,17 @@ class RegulatoryMonitoringSystem:
     """
 
     def __init__(self):
+        if load_dotenv:
+            load_dotenv()
+
+        llm_model = RegulatoryLLM.from_env()
+        if llm_model:
+            logger.info("LLM configurado: provider=%s model=%s", llm_model.config.provider, llm_model.config.model)
+        else:
+            logger.info("LLM não configurado; análise usará fallback heurístico")
+
         self.monitor_agent = MonitorAgent()
-        self.analysis_agent = AnalysisAgent()
+        self.analysis_agent = AnalysisAgent(llm_model=llm_model)
         self.alert_agent = AlertAgent()
         self.system_status = "initialized"
 
@@ -95,18 +111,29 @@ class RegulatoryMonitoringSystem:
         """
         Etapa 1: Coleta de documentos
         
-        TODO:
-        - Implementar coleta real de BCB e CVM
-        - Tratamento de erros de rede
-        - Retry logic
+        Usa coleta automática dos agentes quando não há documentos manuais.
         """
         if manual_documents:
             logger.info("Usando documentos manuais para teste")
             return manual_documents
         
-        # TODO: Implementar coleta real
-        logger.info("Coleta automática ainda não implementada - usando dados de teste")
-        return self._get_test_documents()
+        collected = self.monitor_agent.monitor_sources()
+        unique_documents = self.monitor_agent.eliminate_duplicates(collected)
+        screened_documents = self.monitor_agent.initial_screening(unique_documents)
+
+        return [
+            {
+                "id": doc.id,
+                "title": doc.title,
+                "source": doc.source,
+                "document_type": doc.document_type,
+                "published_date": doc.published_date,
+                "url": doc.url,
+                "content": doc.content,
+                "metadata": doc.metadata or {},
+            }
+            for doc in screened_documents
+        ]
 
     def _analyze_documents(self, documents: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
         """Etapa 2: Análise de impacto regulatório"""
@@ -114,33 +141,18 @@ class RegulatoryMonitoringSystem:
         
         for i, doc in enumerate(documents, 1):
             logger.info(f"  [{i}/{len(documents)}] Analisando: {doc.get('title', 'sem título')[:60]}...")
-            
-            # Simula análise com placeholder
-            analysis = {
-                "document_id": doc.get("id", f"doc_{i}"),
+
+            metadata = {
+                "id": doc.get("id", f"doc_{i}"),
                 "title": doc.get("title", ""),
                 "source": doc.get("source", "BCB"),
-                "document_type": doc.get("document_type", "Circular"),
-                "regulatory_body": doc.get("source", "BCB"),
-                "source_url": doc.get("url", ""),
-                "content": doc.get("content", ""),
-                "affected_activities": ["Processamento de pagamentos", "Open Banking"],
-                "obligations": [
-                    "Implementar autenticação MFA",
-                    "Manter registros de transações"
-                ],
-                "effective_date": None,
-                "implementation_deadline": None,
-                "impact_score": 0.75,
-                "impact_description": "Alto impacto para fintechs de pagamento",
-                "confidence_scores": {
-                    "summary": 0.85,
-                    "dates": 0.60,
-                    "obligations": 0.80,
-                    "impact": 0.75
-                }
+                "document_type": doc.get("document_type", ""),
+                "url": doc.get("url", ""),
+                "published_date": doc.get("published_date"),
             }
-            
+            extracted_info = self.analysis_agent.analyze_document(doc.get("content", ""), metadata)
+            analysis = asdict(extracted_info)
+            analysis["source_url"] = doc.get("url", "")
             analyses.append(analysis)
         
         return analyses

@@ -1,12 +1,16 @@
 """
-Utilitários para coleta e processamento de dados regulatórios
+Utilitários para coleta e processamento de dados regulatórios.
+
+O pipeline principal usa `src/agents/monitor_agent.py`. Este módulo mantém
+funções auxiliares e o esqueleto do repositório persistente que será evoluído
+no próximo passo.
 """
 import logging
 from typing import List, Dict, Any, Optional
 from datetime import datetime
+from html import unescape
 import requests
 from bs4 import BeautifulSoup
-import feedparser
 
 logger = logging.getLogger(__name__)
 
@@ -14,48 +18,63 @@ logger = logging.getLogger(__name__)
 class DataCollector:
     """Coleta documentos de fontes regulatórias"""
 
-    # URLs e feeds
-    BCB_RSS_FEED = "https://www.bcb.gov.br/htms/novidades/ult_noticias.xml"
+    # URLs principais
+    BCB_NEWS_API = "https://www.bcb.gov.br/api/servico/sitebcb/noticias?quantidade=20"
     BCB_BASE_URL = "https://www.bcb.gov.br"
     CVM_BASE_URL = "https://www.cvm.gov.br"
 
     @staticmethod
-    def fetch_bcb_rss() -> List[Dict[str, Any]]:
+    def fetch_bcb_news() -> List[Dict[str, Any]]:
         """
-        TODO: Implementar coleta de RSS do BCB
-        
-        O BCB publica notícias em RSS. Necessário:
-        - Parsear feed RSS
-        - Filtrar apenas atos normativos (não notícias genéricas)
-        - Extrair: título, data, URL, resumo
-        - Classificar tipo (Circular, Resolução, etc)
+        Coleta publicações recentes do BCB pela API pública atual.
+
+        Para a coleta usada no sistema, prefira MonitorAgent, que também
+        normaliza para RegulatoryDocument e filtra itens regulatórios.
         """
         try:
-            feed = feedparser.parse(DataCollector.BCB_RSS_FEED)
+            response = requests.get(DataCollector.BCB_NEWS_API, timeout=15)
+            response.raise_for_status()
+            payload = response.json()
             documents = []
-            
-            for entry in feed.entries:
-                # Placeholder: estrutura básica
+
+            for entry in payload.get("conteudo", []):
+                item_id = entry.get("Id", "")
                 doc = {
-                    'title': entry.get('title', ''),
-                    'published': entry.get('published', ''),
-                    'link': entry.get('link', ''),
-                    'summary': entry.get('summary', ''),
+                    'title': DataCollector._clean_html(entry.get('titulo', '')),
+                    'published': entry.get('dataPublicacao', ''),
+                    'link': f"{DataCollector.BCB_BASE_URL}/detalhenoticia/{item_id}/noticia" if item_id else DataCollector.BCB_BASE_URL,
+                    'summary': DataCollector._clean_html(
+                        " ".join(
+                            value
+                            for value in [entry.get('lead', ''), entry.get('corpo', '')]
+                            if value
+                        )
+                    ),
                     'source': 'BCB'
                 }
                 documents.append(doc)
-            
-            logger.info(f"Coletados {len(documents)} documentos do BCB RSS")
+
+            logger.info(f"Coletadas {len(documents)} publicações do BCB")
             return documents
-            
+
         except Exception as e:
-            logger.error(f"Erro ao coletar BCB RSS: {str(e)}")
+            logger.error(f"Erro ao coletar publicações do BCB: {str(e)}")
             return []
+
+    @staticmethod
+    def fetch_bcb_rss() -> List[Dict[str, Any]]:
+        """
+        Compatibilidade para chamadas antigas.
+
+        O RSS historico do BCB nao e mais o caminho padrao do projeto; esta
+        funcao delega para a API atual.
+        """
+        return DataCollector.fetch_bcb_news()
 
     @staticmethod
     def fetch_bcb_circulares() -> List[Dict[str, Any]]:
         """
-        TODO: Implementar scraping de circulares do BCB
+        Pendente: implementar coleta de atos normativos detalhados do BCB.
         
         URL: https://www.bcb.gov.br/content/cns/atos/
         - Listar circulares por ano
@@ -67,7 +86,7 @@ class DataCollector:
     @staticmethod
     def fetch_cvm_documents() -> List[Dict[str, Any]]:
         """
-        TODO: Implementar coleta de documentos CVM
+        Pendente: implementar coleta de documentos CVM.
         
         CVM oferece múltiplas páginas:
         - Instruções: https://www.cvm.gov.br/decisoes/instrucoes
@@ -90,7 +109,9 @@ class DataCollector:
     @staticmethod
     def normalize_date(date_str: str) -> Optional[datetime]:
         """
-        TODO: Implementar normalização de datas
+        Normaliza datas simples.
+
+        Pendencias:
         - Suportar múltiplos formatos
         - Lidar com descrições vagas ("em breve", "30 dias após publicação")
         - Retornar datetime ou None
@@ -110,6 +131,15 @@ class DataCollector:
         logger.warning(f"Não conseguiu normalizar data: {date_str}")
         return None
 
+    @staticmethod
+    def _clean_html(text: str) -> str:
+        """Remove tags HTML e normaliza espaços."""
+        if not text:
+            return ""
+        if "<" in text and ">" in text:
+            text = BeautifulSoup(text, "html.parser").get_text(" ", strip=True)
+        return " ".join(unescape(text).split())
+
 
 class TextProcessor:
     """Processa e limpa texto regulatório"""
@@ -126,7 +156,7 @@ class TextProcessor:
     @staticmethod
     def extract_sections(text: str) -> Dict[str, str]:
         """
-        TODO: Implementar extração de seções de documento legal
+        Pendente: implementar extração de seções de documento legal.
         
         Documentos regulatórios tem estrutura:
         - Cabeçalho (regulador, tipo, número)
@@ -143,7 +173,7 @@ class TextProcessor:
     @staticmethod
     def extract_dates(text: str) -> List[Dict[str, Any]]:
         """
-        TODO: Implementar extração de datas e prazos
+        Pendente: implementar extração utilitária de datas e prazos.
         
         Padrões a procurar:
         - "30 de janeiro de 2024"
@@ -157,7 +187,7 @@ class TextProcessor:
     @staticmethod
     def extract_obligations(text: str) -> List[str]:
         """
-        TODO: Implementar extração de obrigações
+        Pendente: implementar extração utilitária de obrigações.
         
         Procurar por verbos modal + obrigação:
         - "As instituições deverão..."
@@ -172,7 +202,7 @@ class TextProcessor:
     @staticmethod
     def extract_entities(text: str) -> List[str]:
         """
-        TODO: Implementar NER para identificar entidades
+        Pendente: implementar NER para identificar entidades.
         
         Tipos de entidades:
         - Instituições financeiras
@@ -188,7 +218,7 @@ class DocumentRepository:
 
     def __init__(self, db_path: str = "regulatory_monitor.db"):
         """
-        TODO: Implementar persistência em banco de dados
+        Pendente: implementar persistência em banco de dados.
         
         Schema necessário:
         - documents: id, title, source, url, content_hash, published_date, processed_date, processed
@@ -199,22 +229,22 @@ class DocumentRepository:
 
     def add_document(self, doc: Dict[str, Any]) -> bool:
         """Adiciona documento ao repositório"""
-        # TODO: Implementar inserção em banco
+        # Pendente: implementar inserção em banco
         return True
 
     def check_duplicate(self, url: str) -> bool:
         """Verifica se documento já foi processado"""
-        # TODO: Implementar query no banco
+        # Pendente: implementar query no banco
         return False
 
     def get_processed_documents(self) -> List[Dict[str, Any]]:
         """Retorna documentos já processados"""
-        # TODO: Implementar query
+        # Pendente: implementar query
         return []
 
     def update_processing_status(self, doc_id: str, status: str) -> bool:
         """Atualiza status de processamento"""
-        # TODO: Implementar update
+        # Pendente: implementar update
         return True
 
     def get_statistics(self) -> Dict[str, Any]:
