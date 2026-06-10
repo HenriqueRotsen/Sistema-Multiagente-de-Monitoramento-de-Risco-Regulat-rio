@@ -27,7 +27,6 @@ except ImportError:  # pragma: no cover - fallback keeps CLI usable before pip i
 logger = logging.getLogger(__name__)
 
 
-BCB_RSS_FEED = "https://www.bcb.gov.br/htms/novidades/ult_noticias.xml"
 BCB_NEWS_API = "https://www.bcb.gov.br/api/servico/sitebcb/noticias?quantidade=20"
 
 
@@ -87,12 +86,9 @@ class MonitorAgent:
     def _fetch_from_source(self, source_name: str, source_url: str) -> List[RegulatoryDocument]:
         """
         Busca documentos de uma fonte específica
-        
-        TODO:
-        - Implementar coleta de RSS do BCB
-        - Implementar scraping do portal CVM
-        - Implementar tratamento de APIs públicas
-        - Normalizar metadados entre fontes
+
+        O BCB ja usa a API publica atual, com suporte opcional a RSS/XML
+        legado quando configurado. A CVM ainda e uma pendencia.
         """
         documents = []
         
@@ -155,7 +151,7 @@ class MonitorAgent:
 
     def _fetch_cvm_documents(self, url: str) -> List[RegulatoryDocument]:
         """
-        TODO: Implementar coleta CVM
+        Pendente: implementar coleta CVM.
         - Portal: https://www.cvm.gov.br/
         - Tipos: Instruções, Resoluções, Deliberações, Comunicados
         - Scraping ou API se disponível
@@ -163,7 +159,7 @@ class MonitorAgent:
         return []
 
     def _detect_bcb_document_type(self, title: str, summary: str = "") -> Optional[str]:
-        """Detecta tipo normativo em itens do RSS do BCB."""
+        """Detecta tipo normativo em entradas do BCB."""
         text = f"{title} {summary}".lower()
         patterns = [
             (r"\bresolu[cç][aã]o\s+conjunta\b", "Resolução Conjunta"),
@@ -257,7 +253,7 @@ class MonitorAgent:
         return ""
 
     def _parse_entry_date(self, entry: Dict[str, Any]) -> Optional[datetime]:
-        """Normaliza datas vindas do feed RSS."""
+        """Normaliza datas vindas da API ou de feed RSS."""
         for parsed_field in ("published_parsed", "updated_parsed"):
             parsed_value = entry.get(parsed_field)
             if parsed_value:
@@ -278,13 +274,13 @@ class MonitorAgent:
         return None
 
     def _build_document_id(self, source: str, title: str, url: str, published_date: datetime) -> str:
-        """Cria identificador estável quando o RSS não fornece GUID confiável."""
+        """Cria identificador estável quando a fonte não fornece GUID confiável."""
         raw = f"{source}|{title}|{url}|{published_date.date().isoformat()}"
         digest = hashlib.sha256(raw.encode("utf-8")).hexdigest()[:16]
         return f"{source.lower()}-{digest}"
 
     def _entry_content(self, entry: Dict[str, Any]) -> str:
-        """Extrai conteúdo textual de entradas RSS com campo content."""
+        """Extrai conteúdo textual de entradas com campo content."""
         content = entry.get("content")
         if isinstance(content, list) and content:
             return content[0].get("value", "")

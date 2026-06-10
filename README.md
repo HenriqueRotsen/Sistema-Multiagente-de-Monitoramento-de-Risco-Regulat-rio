@@ -1,153 +1,165 @@
 # Sistema Multiagente de Monitoramento de Risco Regulatório
 
-Sistema de IA para monitoramento automatizado de mudanças regulatórias no setor financeiro brasileiro, focando em publicações do Banco Central do Brasil (BCB) e Comissão de Valores Mobiliários (CVM).
+Sistema de IA para monitoramento automatizado de mudanças regulatórias no setor financeiro brasileiro, com foco inicial em publicações do Banco Central do Brasil (BCB) relevantes para fintechs e instituições de pagamento.
 
-## 📋 Estrutura do Projeto
+## Status Atual
 
-```
+- [x] Arquitetura multiagente com 3 agentes
+- [x] Coleta real de publicações do BCB via API pública atual
+- [x] Triagem inicial e deduplicação de documentos
+- [x] Integração com LLM via proxy Ollama da disciplina (`/api/chat`, header `X-API-Key`)
+- [x] Suporte alternativo a servidores OpenAI-compatible (`/chat/completions`)
+- [x] Fallback heurístico sem LLM para resumo, datas, obrigações, impacto e recomendações
+- [x] Alertas estruturados com resumo, impacto, obrigações, recomendações e rastreabilidade
+- [x] Interface Streamlit básica
+- [x] Testes unitários para coleta, análise, LLM e alertas
+- [ ] Coleta CVM real
+- [ ] Banco de dados persistente
+- [ ] Corpus anotado e métricas de avaliação
+
+## Estrutura do Projeto
+
+```text
 .
+├── main.py                         # Orquestra o ciclo completo
+├── app.py                          # Interface Streamlit
 ├── src/
-│   ├── agents/           # Agentes principais do sistema
-│   │   ├── monitor_agent.py       # Monitora fontes regulatórias
-│   │   ├── analysis_agent.py      # Analisa impacto regulatório
-│   │   └── alert_agent.py         # Gera alertas estruturados
-│   ├── utils/            # Funções utilitárias
-│   │   ├── data_collection.py     # Coleta de documentos
-│   │   ├── extraction.py          # Extração de informações
-│   │   ├── embeddings.py          # Processamento de embeddings
-│   │   └── validators.py          # Validações
-│   └── data/             # Dados e modelos
-│       ├── profiles.yaml  # Perfis setoriais
-│       └── keywords.json  # Palavras-chave por domínio
-├── database/
-│   └── schema.sql        # Schema do banco de dados
-├── notebooks/            # Análise exploratória
-├── tests/                # Testes unitários
-├── app.py                # Interface Streamlit
-└── main.py               # Orquestração principal
-
+│   ├── agents/
+│   │   ├── monitor_agent.py        # Coleta BCB, deduplicação e triagem
+│   │   ├── analysis_agent.py       # Análise via LLM ou fallback heurístico
+│   │   └── alert_agent.py          # Geração e priorização de alertas
+│   └── utils/
+│       ├── llm_integration.py      # Cliente Ollama/OpenAI-compatible
+│       └── data_collection.py      # Utilitários e repositório em esqueleto
+├── tests/
+│   ├── test_monitor_agent.py
+│   ├── test_analysis_agent.py
+│   ├── test_llm_integration.py
+│   └── test_alert_agent.py
+├── requirements.txt
+├── .env.example
+└── TODO.md
 ```
 
-## 🎯 Objetivos
+## Arquitetura
 
-- [x] Arquitetura de 3 agentes multiagente
-- [ ] Coleta automática de documentos do BCB e CVM
-- [ ] Classificação de relevância por setor (fintechs/pagamentos)
-- [ ] Extração estruturada de informações (datas, prazos, impacto)
-- [ ] Geração de alertas estruturados
-- [ ] Interface para visualização e triagem humana
-- [ ] Base de dados com histórico processado
-- [ ] Avaliação com métricas (Precisão, Recall, F1)
-
-## 🔧 Arquitetura do Sistema Multiagente
-
-### 1. **Monitor Agent** (Coletor)
-- Observa fontes: RSS BCB, portal CVM, APIs públicas
-- Detecta novos documentos
-- Elimina duplicatas
-- Encaminha para análise inicial
-
-### 2. **Analysis Agent** (Analisador de Impacto)
-- Análise profunda do conteúdo
-- Extrai: obrigações, atividades afetadas, datas, prazos
-- Estima impacto potencial
-- Identifica entidades impactadas
-
-### 3. **Alert Agent** (Gerador de Alertas)
-- Consolida dados extraídos
-- Prioriza por urgência
-- Gera alertas estruturados
-- Formata para triagem humana
-
-## 📊 Fluxo de Processamento
-
-```
-Fontes Regulatórias
-        ↓
-   [Monitor Agent]
-   (triagem inicial)
-        ↓
-  [Analysis Agent]
-  (extração de info)
-        ↓
-   [Alert Agent]
-   (formatação)
-        ↓
- [Validação Humana]
-        ↓
-   Interface/Output
+```text
+Fontes regulatórias
+        |
+        v
+Monitor Agent
+  - Coleta BCB via API pública
+  - Filtra itens regulatórios
+  - Remove duplicatas
+        |
+        v
+Analysis Agent
+  - Usa LLM se configurado
+  - Usa fallback heurístico se necessário
+  - Extrai resumo, datas, obrigações, impacto e recomendações
+        |
+        v
+Alert Agent
+  - Define prioridade
+  - Formata alerta para triagem humana
+  - Exporta JSON
+        |
+        v
+Interface / Console / Validação humana
 ```
 
-## 🚀 Como Começar
+## Configuração
+
+Crie o `.env` a partir do exemplo:
 
 ```bash
-# Instalar dependências
-pip install -r requirements.txt
-
-# Configurar variáveis de ambiente
 cp .env.example .env
-# Editar .env com suas chaves de API
+```
 
-# Executar agente
-python main.py
+Configuração recomendada para o proxy Ollama da disciplina:
 
-# Iniciar interface Streamlit
+```env
+LLM_PROVIDER=ollama
+LLM_BASE_URL=https://ollama.futurelab.dcc.ufmg.br
+LLM_API_KEY=sua_chave_aqui
+LLM_API_KEY_HEADER=X-API-Key
+LLM_MODEL=llama3.2:3b
+LLM_TIMEOUT_SECONDS=60
+LLM_MAX_TOKENS=1200
+LLM_TEMPERATURE=0.1
+
+BCB_NEWS_API_URL=https://www.bcb.gov.br/api/servico/sitebcb/noticias?quantidade=20
+```
+
+Modelos úteis disponíveis no servidor da disciplina incluem `llama3.2:3b` para testes rápidos e `deepseek-r1:8b` para análises mais fortes.
+
+## Como Rodar
+
+Instale dependências:
+
+```bash
+pip install -r requirements.txt
+```
+
+Rode o pipeline completo:
+
+```bash
+python3 main.py
+```
+
+Rode a interface:
+
+```bash
 streamlit run app.py
 ```
 
-## 📝 Configuração
+Rode os testes:
 
-Criar arquivo `.env`:
-```env
-# LLM
-LLM_API_KEY=your_api_key_here
-LLM_MODEL=your_model_name
-
-# Banco de Dados
-DB_URL=sqlite:///regulatory_monitor.db
-
-# Fontes
-BCB_RSS_URL=https://www.bcb.gov.br/...
-CVM_RSS_URL=https://www.cvm.gov.br/...
-
-# Embeddings
-EMBEDDING_MODEL=sentence-transformers/...
-CHROMA_DB_PATH=./chroma_db
+```bash
+PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -v
 ```
 
-## 🔍 Perfil Setorial Monitorado
+## Teste Rápido do LLM
 
-**Foco Inicial**: Fintechs e Instituições de Pagamento
-- Tópicos: Pagamentos, PLD/FT, Segurança, Compliance, Open Banking
-- Reguladores: BCB, CVM
-- Idioma: Português (BR)
+```bash
+PYTHONDONTWRITEBYTECODE=1 python3 -c "from main import RegulatoryMonitoringSystem; system=RegulatoryMonitoringSystem(); system.run_monitoring_cycle(manual_documents=[{'id':'teste','title':'Circular de Teste - Instituições de Pagamento','source':'BCB','document_type':'Circular','url':'https://example.com/teste','content':'O Banco Central determina que as instituições de pagamento deverão atualizar seus controles de prevenção a fraudes e autenticação de usuários até 30/06/2026. A norma entra em vigor em 01/01/2026. As instituições deverão manter registros das transações e comunicar incidentes relevantes ao regulador.'}])"
+```
 
-## 📊 Métricas de Avaliação
+Resultado esperado: alerta com seções de resumo, impacto, atividades afetadas, obrigações, recomendações, prazo, confiança e fonte.
 
-- **Classificação**: Precisão, Recall, F1-score
-- **Extração**: Acurácia em campos críticos (data, prazo, regulador)
-- **Qualitativa**: Clareza, rastreabilidade, utilidade dos alertas
+## Perfil Setorial Monitorado
 
-## ⚠️ Limitações & Governance
+**Foco inicial:** fintechs e instituições de pagamento.
 
-- ❌ NÃO substitui consultoria jurídica
-- ❌ NÃO toma decisões autônomas
-- ✅ REQUER validação humana de todos os alertas
-- ✅ PRESERVA rastreabilidade até fonte original
-- ✅ INDICA confiança/natureza estimativa de inferências
+Temas monitorados:
+- pagamentos
+- Pix
+- Open Banking/Open Finance
+- prevenção a fraudes
+- segurança/autenticação
+- compliance
+- PLD/FT
+- regulação prudencial
 
-## 🧪 Status de Implementação
+## Limitações e Governança
 
-- [ ] Monitor Agent funcional
-- [ ] Analysis Agent funcional
-- [ ] Alert Agent funcional
-- [ ] Integração com BCB/CVM
-- [ ] Database schema
-- [ ] Interface Streamlit
-- [ ] Testes unitários
-- [ ] Avaliação com corpus anotado
+- Não substitui consultoria jurídica.
+- Não toma decisões autônomas.
+- Todos os alertas exigem revisão humana.
+- O LLM pode errar, omitir ou inferir incorretamente.
+- A rastreabilidade até a fonte é preservada no alerta.
+- A confiança é estimada e deve ser usada como sinal auxiliar, não como verdade.
+
+## Próximos Passos
+
+1. Implementar coleta real da CVM.
+2. Criar persistência em banco de dados para documentos, análises e alertas.
+3. Criar corpus anotado com 30-50 documentos.
+4. Calcular precisão, recall, F1 e acurácia de campos extraídos.
+5. Melhorar filtros e histórico na interface Streamlit.
 
 ---
-**Disciplina**: Projeto de Agentes de IA
-**Professor**: Antônio Alfredo Ferreira Loureiro
-**Alunos**: Gabriel Castelo Branco Rocha Alencar Pinto, Henrique Rotsen Santos Ferreira
+
+**Disciplina:** Projeto de Agentes de IA  
+**Professor:** Antônio Alfredo Ferreira Loureiro  
+**Alunos:** Gabriel Castelo Branco Rocha Alencar Pinto, Henrique Rotsen Santos Ferreira

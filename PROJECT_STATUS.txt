@@ -1,203 +1,132 @@
-╔══════════════════════════════════════════════════════════════════════════════╗
-║                                                                              ║
-║         🏛️  SISTEMA MULTIAGENTE DE MONITORAMENTO REGULATÓRIO                ║
-║                 Disciplina: Projeto de Agentes de IA                         ║
-║                                                                              ║
-╚══════════════════════════════════════════════════════════════════════════════╝
+==============================================================================
+        SISTEMA MULTIAGENTE DE MONITORAMENTO REGULATORIO
+        Disciplina: Projeto de Agentes de IA
+==============================================================================
 
-📊 STATUS DO PROJETO: ✅ PRONTO PARA DESENVOLVIMENTO
+STATUS DO PROJETO: PROTOTIPO FUNCIONAL COM BCB REAL + LLM
 
-┌──────────────────────────────────────────────────────────────────────────────┐
-│ ESTATÍSTICAS                                                                 │
-├──────────────────────────────────────────────────────────────────────────────┤
-│ Linhas de código:           1,177 linhas (core)                             │
-│ Arquivos Python:            7 arquivos                                      │
-│ Documentação:               5 arquivos markdown                             │
-│ Tamanho total:              ~250 KB                                         │
-│                                                                              │
-│ Monitor Agent:              154 linhas (70% pronto)                         │
-│ Analysis Agent:             204 linhas (70% pronto)                         │
-│ Alert Agent:                306 linhas (95% pronto)                         │
-│ Main Orchestrator:          227 linhas (✅ Funcional)                       │
-│ Streamlit Interface:        283 linhas (✅ Funcional)                       │
-│                                                                              │
-│ Testes:                     2 arquivos iniciados                            │
-└──────────────────────────────────────────────────────────────────────────────┘
+Atualizado em: 10 de junho de 2026
+Versao: 0.2.0
 
-┌──────────────────────────────────────────────────────────────────────────────┐
-│ CHECKLIST DE IMPLEMENTAÇÃO                                                  │
-├──────────────────────────────────────────────────────────────────────────────┤
-│                                                                              │
-│ ARQUITETURA                                                                  │
-│ ✅ Estrutura de 3 agentes definida                                          │
-│ ✅ Fluxo de dados documentado                                               │
-│ ✅ Padrão de comunicação entre agentes                                      │
-│                                                                              │
-│ AGENTS IMPLEMENTADOS                                                         │
-│ ✅ Monitor Agent (coleta - estrutura pronta)                               │
-│ ✅ Analysis Agent (análise - estrutura pronta)                             │
-│ ✅ Alert Agent (alertas - 95% pronto)                                      │
-│                                                                              │
-│ INTEGRAÇÃO                                                                   │
-│ ✅ Orquestrador principal (main.py)                                         │
-│ ✅ Ciclo completo funcionando                                               │
-│ ✅ Dados de teste inclusos                                                  │
-│                                                                              │
-│ INTERFACE                                                                    │
-│ ✅ Dashboard Streamlit básico                                               │
-│ ✅ Visualização de alertas                                                  │
-│ ✅ Painel de controle                                                       │
-│ ✅ Sistema de filtros                                                       │
-│                                                                              │
-│ DOCUMENTAÇÃO                                                                 │
-│ ✅ README.md (visão geral)                                                  │
-│ ✅ ARCHITECTURE.md (diagramas)                                              │
-│ ✅ GETTING_STARTED.md (guia prático)                                        │
-│ ✅ TODO.md (tarefas pendentes)                                              │
-│ ✅ IMPLEMENTATION_SUMMARY.md (este status)                                  │
-│ ✅ LLM_INTEGRATION_EXAMPLE.py (template)                                    │
-│ ✅ .env.example (configuração)                                              │
-│                                                                              │
-│ TESTES                                                                       │
-│ 🟡 Testes unitários iniciados                                               │
-│ ⏳ Cobertura de testes (TODO)                                               │
-│                                                                              │
-└──────────────────────────────────────────────────────────────────────────────┘
+------------------------------------------------------------------------------
+RESUMO
+------------------------------------------------------------------------------
 
-┌──────────────────────────────────────────────────────────────────────────────┐
-│ O QUE FAZER AGORA (PRÓXIMOS PASSOS)                                         │
-├──────────────────────────────────────────────────────────────────────────────┤
-│                                                                              │
-│ 🔥 CRÍTICO (Esta semana)                                                    │
-│                                                                              │
-│ 1. Implementar _fetch_bcb_documents()                                       │
-│    → Arquivo: src/agents/monitor_agent.py                                   │
-│    → Tempo: 1-2 horas                                                       │
-│    → Prioridade: ALTA (valida todo pipeline)                               │
-│                                                                              │
-│ 2. Implementar _fetch_cvm_documents()                                       │
-│    → Arquivo: src/agents/monitor_agent.py                                   │
-│    → Tempo: 2-3 horas                                                       │
-│    → Prioridade: ALTA                                                       │
-│                                                                              │
-│ 3. Integrar LLM para análise                                                │
-│    → Usar LLM_INTEGRATION_EXAMPLE.py como template                          │
-│    → Tempo: 2-3 horas                                                       │
-│    → Requer: API key (OpenAI, Anthropic, etc)                              │
-│                                                                              │
-│ 🟡 IMPORTANTE (Próximas semanas)                                            │
-│                                                                              │
-│ 4. Implementar extração de datas (_extract_dates)                           │
-│ 5. Implementar extração de obrigações (_extract_obligations)                │
-│ 6. Criar banco de dados persistente                                         │
-│ 7. Montar corpus anotado (~30-50 documentos)                                │
-│ 8. Calcular métricas de avaliação                                           │
-│                                                                              │
-└──────────────────────────────────────────────────────────────────────────────┘
+O sistema ja executa um ciclo completo:
 
-┌──────────────────────────────────────────────────────────────────────────────┐
-│ COMO COMEÇAR (PRIMEIRA EXECUÇÃO)                                            │
-├──────────────────────────────────────────────────────────────────────────────┤
-│                                                                              │
-│ Opção 1: Via script rápido                                                  │
-│   $ ./QUICK_START.sh                                                        │
-│                                                                              │
-│ Opção 2: Manual                                                              │
-│   $ pip install -r requirements.txt                                         │
-│   $ python3 main.py                                                         │
-│                                                                              │
-│ Opção 3: Com interface Streamlit                                            │
-│   $ streamlit run app.py                                                    │
-│                                                                              │
-└──────────────────────────────────────────────────────────────────────────────┘
+1. Coleta publicacoes reais do BCB pela API publica atual.
+2. Filtra itens com sinais regulatorios.
+3. Analisa documentos com LLM quando configurado.
+4. Usa fallback heuristico quando o LLM nao esta disponivel.
+5. Gera alertas com resumo, impacto, obrigacoes e recomendacoes.
+6. Permite visualizacao basica via Streamlit.
 
-┌──────────────────────────────────────────────────────────────────────────────┐
-│ ESTRUTURA DE ARQUIVOS                                                        │
-├──────────────────────────────────────────────────────────────────────────────┤
-│                                                                              │
-│ TP/                                                                          │
-│ ├── src/                                  [Código fonte]                    │
-│ │   ├── agents/                          [3 Agentes principais]             │
-│ │   │   ├── monitor_agent.py            ✅ Coleta/triagem                  │
-│ │   │   ├── analysis_agent.py           ✅ Análise/extração                │
-│ │   │   ├── alert_agent.py              ✅ Alertas/priorização             │
-│ │   │   └── __init__.py                                                     │
-│ │   ├── utils/                           [Utilitários]                      │
-│ │   │   ├── data_collection.py          ✅ Coleta de dados                 │
-│ │   │   └── __init__.py                                                     │
-│ │   └── __init__.py                                                         │
-│ │                                                                            │
-│ ├── tests/                               [Testes]                           │
-│ │   └── test_monitor_agent.py            ✅ Testes iniciais                │
-│ │                                                                            │
-│ ├── notebooks/                           [Análise exploratória]             │
-│ │   └── (vazio - pronto para uso)                                          │
-│ │                                                                            │
-│ ├── main.py                              ✅ Orquestrador (FUNCIONAL)       │
-│ ├── app.py                               ✅ Interface Streamlit             │
-│ │                                                                            │
-│ ├── README.md                            📖 Visão geral                     │
-│ ├── ARCHITECTURE.md                      📖 Arquitetura                    │
-│ ├── GETTING_STARTED.md                   📖 Guia prático                   │
-│ ├── TODO.md                              📋 Tarefas                         │
-│ ├── IMPLEMENTATION_SUMMARY.md            📋 Resumo (aqui)                  │
-│ ├── PROJECT_STATUS.txt                   📋 Status (aqui)                  │
-│ ├── LLM_INTEGRATION_EXAMPLE.py           📝 Template LLM                   │
-│ ├── QUICK_START.sh                       🚀 Script rápido                  │
-│ ├── .env.example                         ⚙️  Configuração                   │
-│ └── requirements.txt                     📦 Dependências                    │
-│                                                                              │
-└──────────────────────────────────────────────────────────────────────────────┘
+------------------------------------------------------------------------------
+IMPLEMENTADO
+------------------------------------------------------------------------------
 
-┌──────────────────────────────────────────────────────────────────────────────┐
-│ RECURSOS DISPONÍVEIS                                                         │
-├──────────────────────────────────────────────────────────────────────────────┤
-│                                                                              │
-│ Documentação:                                                                │
-│   • Proposta original: /home/rotsen/Downloads/proposta_*.pdf                │
-│   • Arquitetura: ARCHITECTURE.md (diagramas ASCII)                          │
-│   • Guia prático: GETTING_STARTED.md                                        │
-│                                                                              │
-│ Código:                                                                      │
-│   • Templates para LLM: LLM_INTEGRATION_EXAMPLE.py                          │
-│   • Testes iniciais: tests/                                                 │
-│   • Dados de teste: main.py (função _get_test_documents)                   │
-│                                                                              │
-│ Desenvolvimento:                                                             │
-│   • Setup automático: ./QUICK_START.sh                                      │
-│   • Configuração: .env.example                                              │
-│   • Dependências: requirements.txt                                          │
-│                                                                              │
-└──────────────────────────────────────────────────────────────────────────────┘
+[x] Arquitetura de 3 agentes
+[x] Orquestrador principal em main.py
+[x] Coleta real BCB
+[x] Dedupliacao e triagem inicial
+[x] Cliente LLM em src/utils/llm_integration.py
+[x] Suporte ao proxy Ollama da disciplina
+[x] Suporte a APIs OpenAI-compatible
+[x] AnalysisAgent integrado ao pipeline real
+[x] Fallback heuristico sem LLM
+[x] AlertAgent usando resumo, impacto e recomendacoes
+[x] Export JSON
+[x] Interface Streamlit basica
+[x] Testes unitarios com unittest discover
+[x] .gitignore protegendo .env
 
-┌──────────────────────────────────────────────────────────────────────────────┐
-│ MÉTRICAS DE PROGRESSO                                                        │
-├──────────────────────────────────────────────────────────────────────────────┤
-│                                                                              │
-│ Arquitetura:      ████████████████████░ 95%                                │
-│ Implementação:    ███████████░░░░░░░░░░ 55%                                │
-│ Documentação:     ███████████████████░░ 90%                                │
-│ Testes:           ███░░░░░░░░░░░░░░░░░ 15%                                │
-│ Integração LLM:   ░░░░░░░░░░░░░░░░░░░░ 0% (template pronto)              │
-│                                                                              │
-│ TOTAL:            ███████████░░░░░░░░░░ 50% DA IMPLEMENTAÇÃO              │
-│                                                                              │
-└──────────────────────────────────────────────────────────────────────────────┘
+------------------------------------------------------------------------------
+PENDENTE
+------------------------------------------------------------------------------
 
-╔══════════════════════════════════════════════════════════════════════════════╗
-║                                                                              ║
-║  ✅ PROJETO PRONTO PARA DESENVOLVIMENTO                                     ║
-║                                                                              ║
-║  Estrutura base: 100% ✓                                                     ║
-║  Agentes: 95% ✓                                                             ║
-║  Interface: 90% ✓                                                           ║
-║  Documentação: 90% ✓                                                        ║
-║                                                                              ║
-║  Próximo passo: Implementar coleta de dados (BCB/CVM)                       ║
-║  Tempo estimado: 1-2 semanas para estar 100% funcional                      ║
-║                                                                              ║
-╚══════════════════════════════════════════════════════════════════════════════╝
+[ ] Coleta real CVM
+[ ] Banco SQLite / camada de persistencia
+[ ] Historico de documentos processados
+[ ] Revisao humana persistida
+[ ] Dashboard Streamlit com dados persistidos
+[ ] Corpus anotado com 30-50 documentos
+[ ] Metricas de avaliacao
+[ ] Export CSV/HTML/PDF
+[ ] Retry/backoff/rate limiting
+[ ] Cache de analises por hash de conteudo
 
-Criado em: 28 de maio de 2024
-Versão: 0.1.0
-Status: ✅ Funcional (com dados de teste)
+------------------------------------------------------------------------------
+COMO TESTAR
+------------------------------------------------------------------------------
+
+1. Testes unitarios:
+
+   PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -v
+
+   Esperado: Ran 13 tests / OK
+
+2. Smoke test com LLM:
+
+   PYTHONDONTWRITEBYTECODE=1 python3 -c "from main import RegulatoryMonitoringSystem; system=RegulatoryMonitoringSystem(); system.run_monitoring_cycle(manual_documents=[{'id':'teste','title':'Circular de Teste','source':'BCB','document_type':'Circular','url':'https://example.com','content':'O Banco Central determina que as instituições de pagamento deverão atualizar controles antifraude até 30/06/2026.'}])"
+
+3. Pipeline real:
+
+   python3 main.py
+
+4. Interface:
+
+   streamlit run app.py
+
+------------------------------------------------------------------------------
+CONFIGURACAO LLM
+------------------------------------------------------------------------------
+
+Arquivo .env:
+
+LLM_PROVIDER=ollama
+LLM_BASE_URL=https://ollama.futurelab.dcc.ufmg.br
+LLM_API_KEY=sua_chave
+LLM_API_KEY_HEADER=X-API-Key
+LLM_MODEL=llama3.2:3b
+LLM_TIMEOUT_SECONDS=60
+LLM_MAX_TOKENS=1200
+LLM_TEMPERATURE=0.1
+
+BCB_NEWS_API_URL=https://www.bcb.gov.br/api/servico/sitebcb/noticias?quantidade=20
+
+------------------------------------------------------------------------------
+PROGRESSO ESTIMADO
+------------------------------------------------------------------------------
+
+Arquitetura:        100%
+Coleta BCB:          90%
+Coleta CVM:           0%
+Analise LLM:         90%
+Fallback heuristico: 70%
+Alertas:             90%
+Interface:           70%
+Persistencia:         0%
+Testes:              60%
+Avaliacao:            0%
+
+TOTAL: aproximadamente 65% da implementacao funcional planejada.
+
+------------------------------------------------------------------------------
+PROXIMO PASSO RECOMENDADO
+------------------------------------------------------------------------------
+
+Implementar persistencia SQLite.
+
+Por que agora:
+- evita reprocessar documentos a cada execucao;
+- permite historico na interface;
+- permite status de revisao humana real;
+- cria base para metricas e avaliacao;
+- facilita adicionar a CVM sem baguncar o fluxo.
+
+Ordem sugerida:
+1. Criar database/schema.sql.
+2. Implementar DocumentRepository.
+3. Integrar duplicatas persistentes ao MonitorAgent.
+4. Salvar analises e alertas.
+5. Ler historico no Streamlit.

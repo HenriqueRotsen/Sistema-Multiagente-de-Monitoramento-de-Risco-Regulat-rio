@@ -1,232 +1,157 @@
-# 🚀 Próximos Passos - Guia Prático
+# Guia Prático de Início
 
-## 1️⃣ Instalação de Dependências
+Este guia descreve como instalar, configurar e testar o estado atual do sistema.
+
+## 1. Instalação
 
 ```bash
-# Navegar para o diretório
 cd /home/rotsen/Área\ de\ Trabalho/1_Semestre_Doutorado/Agentes\ De\ IA/TP
 
-# Criar ambiente virtual (recomendado)
 python3 -m venv venv
-source venv/bin/activate  # No Windows: venv\Scripts\activate
+source venv/bin/activate
 
-# Instalar dependências
 pip install -r requirements.txt
 ```
 
-## 2️⃣ Configurar Variáveis de Ambiente
+## 2. Configuração do `.env`
 
 ```bash
-# Copiar arquivo de exemplo
 cp .env.example .env
-
-# Editar .env com suas credenciais
-nano .env  # ou seu editor preferido
 ```
 
-**Campos importantes a preencher:**
-- `LLM_API_KEY`: Sua chave da API (OpenAI, Anthropic, etc)
-- `LLM_MODEL`: Modelo a usar (gpt-4, claude-3, etc)
-- `EMBEDDING_MODEL`: Modelo de embeddings (já tem default)
+Edite `.env` com a chave da API da disciplina:
 
-## 3️⃣ Primeira Execução
+```env
+LLM_PROVIDER=ollama
+LLM_BASE_URL=https://ollama.futurelab.dcc.ufmg.br
+LLM_API_KEY=sua_chave_aqui
+LLM_API_KEY_HEADER=X-API-Key
+LLM_MODEL=llama3.2:3b
+LLM_TIMEOUT_SECONDS=60
+LLM_MAX_TOKENS=1200
+LLM_TEMPERATURE=0.1
 
-### Opção A: Via linha de comando (teste rápido)
+BCB_NEWS_API_URL=https://www.bcb.gov.br/api/servico/sitebcb/noticias?quantidade=20
+```
+
+Para análises mais fortes, teste:
+
+```env
+LLM_MODEL=deepseek-r1:8b
+```
+
+O arquivo `.env` está ignorado no git para proteger a chave.
+
+## 3. Teste Rápido do LLM
+
+Rode um ciclo com documento manual pequeno:
+
+```bash
+PYTHONDONTWRITEBYTECODE=1 python3 -c "from main import RegulatoryMonitoringSystem; system=RegulatoryMonitoringSystem(); system.run_monitoring_cycle(manual_documents=[{'id':'teste','title':'Circular de Teste - Instituições de Pagamento','source':'BCB','document_type':'Circular','url':'https://example.com/teste','content':'O Banco Central determina que as instituições de pagamento deverão atualizar seus controles de prevenção a fraudes e autenticação de usuários até 30/06/2026. A norma entra em vigor em 01/01/2026. As instituições deverão manter registros das transações e comunicar incidentes relevantes ao regulador.'}])"
+```
+
+Resultado esperado:
+
+- log `LLM configurado: provider=ollama model=...`
+- alerta com `RESUMO`, `IMPACTO`, `OBRIGAÇÕES` e `RECOMENDAÇÕES`
+- prioridade baseada em prazo e impacto
+
+## 4. Executar Pipeline Real
+
 ```bash
 python3 main.py
 ```
 
-Isso executará um ciclo completo com dados de teste e exibirá os alertas gerados.
+O sistema irá:
 
-### Opção B: Via Streamlit (interface visual)
+1. Coletar publicações reais do BCB.
+2. Filtrar itens regulatórios.
+3. Analisar cada documento com LLM, se configurado.
+4. Usar fallback heurístico se o LLM falhar.
+5. Gerar alertas estruturados no console.
+
+Observação: o ciclo real pode chamar o LLM várias vezes. Para testes rápidos, prefira o comando manual da seção anterior.
+
+## 5. Interface Streamlit
+
 ```bash
 streamlit run app.py
 ```
 
-Abrirá uma interface web em `http://localhost:8501`
+Abra o endereço indicado pelo Streamlit e clique em **Executar Ciclo de Monitoramento**.
 
-## 4️⃣ Prioridades de Implementação
+Status atual da interface:
 
-### FASE 1 - Coleta de Dados (🔥 Critical)
-1. **Implementar `_fetch_bcb_documents()`** 
-   - Arquivo: `src/agents/monitor_agent.py`
-   - Tarefas:
-     - Parser de RSS do BCB
-     - Normalizar tipos de documentos
-     - Trata de exceções
+- dashboard básico
+- execução do ciclo
+- visualização de alertas
+- export JSON
+- filtros visuais ainda parcialmente conectados
+- revisão humana ainda não persistida
 
-2. **Implementar `_fetch_cvm_documents()`**
-   - Similar ao BCB mas para CVM
-   - Portal CVM é mais complexo (pode precisar de scraping)
-
-### FASE 2 - Análise e Extração (🔥 Critical)
-1. **Implementar `_extract_dates()`** em `src/agents/analysis_agent.py`
-   - Regex para formatos brasileiros
-   - Processar prazos relativos ("30 dias após publicação")
-
-2. **Implementar `_extract_obligations()`**
-   - NER ou busca de palavras-chave
-   - Estruturar como lista
-
-3. **Integrar com LLM para sumarização**
-   - Criar `src/utils/llm_integration.py`
-   - Usar prompts em português
-
-### FASE 3 - Persistência (📋 Important)
-1. **Criar schema de banco de dados** (`database/schema.sql`)
-2. **Implementar `DocumentRepository`** em `src/utils/data_collection.py`
-3. **Salvar histórico processado**
-
-### FASE 4 - Teste e Avaliação (📊 Important)
-1. **Criar corpus anotado** em `data/test_corpus.json`
-   - ~30-50 documentos reais
-   - Anotados com verdade-ouro
-
-2. **Calcular métricas**
-   - Precisão/Recall/F1 para classificação
-   - Acurácia para campos extraídos
-
-## 5️⃣ Exemplo: Implementar coleta BCB
-
-**Arquivo:** `src/agents/monitor_agent.py`
-
-**Função a completar:**
-```python
-def _fetch_bcb_documents(self, url: str) -> List[RegulatoryDocument]:
-    """Coleta documentos do BCB via RSS"""
-    try:
-        # 1. Parse RSS
-        feed = feedparser.parse("https://www.bcb.gov.br/htms/novidades/ult_noticias.xml")
-        
-        documents = []
-        for entry in feed.entries:
-            # 2. Filtar apenas atos normativos (palavras-chave: "Circular", "Resolução", etc)
-            if not any(word in entry.title for word in ["Circular", "Resolução", "Ofício"]):
-                continue
-            
-            # 3. Criar RegulatoryDocument
-            doc = RegulatoryDocument(
-                id=entry.get('id', entry.link),
-                title=entry.title,
-                source="BCB",
-                document_type=self._detect_document_type(entry.title),
-                published_date=datetime.fromisoformat(entry.published),
-                url=entry.link,
-                content=entry.summary
-            )
-            documents.append(doc)
-        
-        return documents
-        
-    except Exception as e:
-        logger.error(f"Erro ao coletar BCB: {e}")
-        return []
-```
-
-## 6️⃣ Estrutura de Commits Recomendada
+## 6. Testes Automatizados
 
 ```bash
-# Commit 1: Setup inicial (já feito)
-git add .
-git commit -m "Initial project structure with 3 agents"
-
-# Commit 2: Implementar coleta
-git commit -m "Implement BCB and CVM document collection"
-
-# Commit 3: Implementar extração
-git commit -m "Implement information extraction (dates, obligations)"
-
-# Commit 4: Integrar LLM
-git commit -m "Add LLM integration for advanced analysis"
-
-# Commit 5: Banco de dados
-git commit -m "Add database persistence layer"
-
-# Commit 6: Testes e avaliação
-git commit -m "Add evaluation metrics and test corpus"
+PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -v
 ```
 
-## 7️⃣ Debugging e Teste Local
+Resultado esperado:
 
-### Ver logs detalhados
-```bash
-# Editar main.py, adicionar ao topo:
-import logging
-logging.basicConfig(level=logging.DEBUG)
-
-python3 main.py
+```text
+Ran 13 tests
+OK
 ```
 
-### Testar componentes isoladamente
-```python
-# Em um script Python (test.py)
-from src.agents.monitor_agent import MonitorAgent
-from src.agents.analysis_agent import AnalysisAgent
-from src.agents.alert_agent import AlertAgent
+Os testes cobrem:
 
-# Testar Monitor Agent
-monitor = MonitorAgent()
-print("Monitor status:", monitor.get_status())
+- coleta BCB via API atual e RSS mockado
+- análise com mock de LLM
+- fallback heurístico
+- cliente Ollama com `X-API-Key`
+- alertas com resumo, impacto e recomendações
+- prioridade com prazo vencido
 
-# Testar Analysis Agent
-analysis = AnalysisAgent()
-result = analysis.analyze_document("Texto de teste...", {"id": "1", "source": "BCB"})
-print("Analysis:", result)
+## 7. Configurações de LLM Suportadas
 
-# Testar Alert Agent
-alert_agent = AlertAgent()
-alert = alert_agent.generate_alert({"title": "Test", "source_url": "..."})
-print(alert_agent.format_for_display(alert))
+### Proxy Ollama da disciplina
+
+```env
+LLM_PROVIDER=ollama
+LLM_BASE_URL=https://ollama.futurelab.dcc.ufmg.br
+LLM_API_KEY=sua_chave
+LLM_API_KEY_HEADER=X-API-Key
+LLM_MODEL=llama3.2:3b
 ```
 
-## 8️⃣ Testes Automatizados (Opcional)
+### Servidor OpenAI-compatible
 
-```bash
-# Criar arquivo tests/test_agents.py
-# Adicionar testes unitários
-
-# Executar
-python3 -m pytest tests/ -v
+```env
+LLM_PROVIDER=openai
+LLM_BASE_URL=https://api.openai.com/v1
+LLM_API_KEY=sua_chave
+LLM_MODEL=gpt-4o-mini
 ```
 
-## 9️⃣ Deploy da Interface
+## 8. Arquivos Mais Importantes
 
-```bash
-# Streamlit cloud deployment (gratuito)
-# 1. Push para GitHub
-# 2. Ir em https://share.streamlit.io
-# 3. Conectar repositório
+| Arquivo | Função |
+|--------|--------|
+| `main.py` | Orquestra coleta, análise e alertas |
+| `src/agents/monitor_agent.py` | Coleta BCB e triagem |
+| `src/agents/analysis_agent.py` | Análise com LLM/fallback |
+| `src/agents/alert_agent.py` | Priorização e formatação dos alertas |
+| `src/utils/llm_integration.py` | Cliente Ollama/OpenAI-compatible |
+| `app.py` | Interface Streamlit |
+| `TODO.md` | Próximas tarefas |
 
-# Ou em servidor privado:
-streamlit run app.py --server.port 80 --server.headless true
-```
+## 9. Próximo Desenvolvimento Recomendado
 
-## 🔟 Recursos Úteis
+Implementar persistência SQLite:
 
-- 📖 [LangChain Docs](https://python.langchain.com/)
-- 📖 [Streamlit Docs](https://docs.streamlit.io/)
-- 📄 [BCB RSS Feed](https://www.bcb.gov.br/htms/novidades/ult_noticias.xml)
-- 🎯 [Proposta Original](file:///home/rotsen/Downloads/proposta_projeto_risco_regulatorio_prosa.pdf)
+1. Criar `database/schema.sql`.
+2. Implementar `DocumentRepository`.
+3. Evitar reprocessamento dos mesmos documentos.
+4. Persistir alertas e revisão humana.
+5. Alimentar a interface Streamlit com histórico real.
 
----
-
-## ⚠️ Checklist de Implementação
-
-- [ ] Coleta BCB implementada
-- [ ] Coleta CVM implementada
-- [ ] Extração de datas funcionando
-- [ ] Extração de obrigações funcionando
-- [ ] LLM integrado para análise
-- [ ] Banco de dados criado e funcionando
-- [ ] Corpus de teste anotado (~30-50 docs)
-- [ ] Métricas calculadas
-- [ ] Interface Streamlit funcional
-- [ ] Documentação atualizada
-- [ ] Testes passando
-- [ ] Pronto para apresentação
-
----
-
-**Você está pronto para começar! 🚀**
-
-Próximo passo recomendado: Implemente `_fetch_bcb_documents()` para começar a coletar documentos reais.
+Depois disso, implementar a coleta CVM fica mais útil, porque o sistema já terá histórico e controle de duplicatas persistente.
