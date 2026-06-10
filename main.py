@@ -95,18 +95,29 @@ class RegulatoryMonitoringSystem:
         """
         Etapa 1: Coleta de documentos
         
-        TODO:
-        - Implementar coleta real de BCB e CVM
-        - Tratamento de erros de rede
-        - Retry logic
+        Usa coleta automática dos agentes quando não há documentos manuais.
         """
         if manual_documents:
             logger.info("Usando documentos manuais para teste")
             return manual_documents
         
-        # TODO: Implementar coleta real
-        logger.info("Coleta automática ainda não implementada - usando dados de teste")
-        return self._get_test_documents()
+        collected = self.monitor_agent.monitor_sources()
+        unique_documents = self.monitor_agent.eliminate_duplicates(collected)
+        screened_documents = self.monitor_agent.initial_screening(unique_documents)
+
+        return [
+            {
+                "id": doc.id,
+                "title": doc.title,
+                "source": doc.source,
+                "document_type": doc.document_type,
+                "published_date": doc.published_date,
+                "url": doc.url,
+                "content": doc.content,
+                "metadata": doc.metadata or {},
+            }
+            for doc in screened_documents
+        ]
 
     def _analyze_documents(self, documents: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
         """Etapa 2: Análise de impacto regulatório"""
