@@ -105,9 +105,9 @@ class AlertAgent:
         
         # Calcula dias até deadline
         days_until = None
-        if extracted_info.get('implementation_deadline'):
-            delta = extracted_info['implementation_deadline'] - datetime.now()
-            days_until = delta.days
+        deadline_dt = self._as_datetime(extracted_info.get('implementation_deadline'))
+        if deadline_dt:
+            days_until = (deadline_dt - datetime.now()).days
         
         alert = StructuredAlert(
             alert_id=alert_id,
@@ -120,8 +120,8 @@ class AlertAgent:
             priority=priority,
             affected_activities=extracted_info.get('affected_activities', []),
             obligations=extracted_info.get('obligations', []),
-            effective_date=extracted_info.get('effective_date'),
-            implementation_deadline=extracted_info.get('implementation_deadline'),
+            effective_date=self._as_datetime(extracted_info.get('effective_date')),
+            implementation_deadline=self._as_datetime(extracted_info.get('implementation_deadline')),
             days_until_deadline=days_until,
             confidence_level=self._assess_confidence(extracted_info),
             impact_assessment=extracted_info.get('impact_description', ''),
@@ -131,6 +131,20 @@ class AlertAgent:
         self.generated_alerts.append(alert)
         return alert
 
+    @staticmethod
+    def _as_datetime(value: Any) -> Optional[datetime]:
+        """Converte string ISO ou datetime para datetime; retorna None se inválido."""
+        if value is None:
+            return None
+        if isinstance(value, datetime):
+            return value
+        if isinstance(value, str):
+            try:
+                return datetime.fromisoformat(value.replace("Z", "+00:00")).replace(tzinfo=None)
+            except ValueError:
+                return None
+        return None
+
     def _determine_priority(self, info: Dict[str, Any]) -> AlertPriority:
         """
         Determina prioridade baseado em:
@@ -138,9 +152,9 @@ class AlertAgent:
         - Score de impacto
         - Tipo de obrigação
         """
-        deadline = info.get('implementation_deadline')
+        deadline = self._as_datetime(info.get('implementation_deadline'))
         impact_score = info.get('impact_score', 0.5)
-        
+
         if deadline:
             delta = deadline - datetime.now()
             days = delta.days
