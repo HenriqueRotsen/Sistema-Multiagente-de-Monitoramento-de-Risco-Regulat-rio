@@ -289,6 +289,15 @@ class AnalysisAgent:
         effective_date = None
         deadline = None
 
+        # Normaliza reference_date caso venha como string ISO do metadata
+        if isinstance(reference_date, str):
+            try:
+                reference_date = datetime.fromisoformat(
+                    reference_date.replace("Z", "+00:00")
+                ).replace(tzinfo=None)
+            except ValueError:
+                reference_date = None
+
         for sentence in self._split_sentences(text):
             dates = self._find_dates(sentence)
             if not dates:
