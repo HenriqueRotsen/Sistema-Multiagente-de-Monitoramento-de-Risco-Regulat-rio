@@ -160,7 +160,7 @@ def render_alerts_section(min_confidence: float = 0.0):
         priority_filter = st.multiselect(
             "Filtrar por Prioridade",
             ["CRÍTICO", "ALTO", "MÉDIO", "BAIXO"],
-            default=["CRÍTICO", "ALTO"]
+            default=["CRÍTICO", "ALTO", "MÉDIO", "BAIXO"]
         )
     
     with col2:
@@ -383,7 +383,7 @@ def render_sidebar():
 
         min_confidence = st.slider(
             "Confiança Mínima",
-            0.0, 1.0, 0.6, 0.1
+            0.0, 1.0, 0.0, 0.1
         )
 
         st.subheader("Visualização")
