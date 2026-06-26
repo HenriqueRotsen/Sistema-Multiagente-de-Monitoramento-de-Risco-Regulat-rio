@@ -15,7 +15,7 @@ Sistema de IA para monitoramento automatizado de mudanças regulatórias no seto
 - [x] Testes unitários para coleta, análise, LLM e alertas
 - [x] Coleta CVM real
 - [x] Banco de dados persistente (SQLite mínimo)
-- [ ] Corpus anotado e métricas de avaliação
+- [x] Corpus anotado inicial e métricas de avaliação
 
 ## Estrutura do Projeto
 
@@ -30,12 +30,22 @@ Sistema de IA para monitoramento automatizado de mudanças regulatórias no seto
 │   │   └── alert_agent.py          # Geração e priorização de alertas
 │   └── utils/
 │       ├── llm_integration.py      # Cliente Ollama/OpenAI-compatible
-│       └── data_collection.py      # Utilitários e repositório em esqueleto
+│       ├── data_collection.py      # Utilitários + repositório SQLite
+│       └── evaluation.py           # Métricas de qualidade da análise
+├── scripts/
+│   ├── build_annotated_corpus.py   # Gera corpus anotado seed
+│   └── evaluate_analysis_quality.py # Roda avaliação e comparação de modelos
+├── data/corpus/
+│   └── annotated_corpus.jsonl      # Corpus anotado inicial (seed)
+├── reports/quality/
+│   └── quality_report_*.json       # Relatórios de avaliação
 ├── tests/
 │   ├── test_monitor_agent.py
 │   ├── test_analysis_agent.py
 │   ├── test_llm_integration.py
-│   └── test_alert_agent.py
+│   ├── test_alert_agent.py
+│   ├── test_document_repository.py
+│   └── test_evaluation.py
 ├── requirements.txt
 ├── .env.example
 └── TODO.md
@@ -141,6 +151,10 @@ PYTHONDONTWRITEBYTECODE=1 python3 scripts/evaluate_analysis_quality.py --corpus 
 
 Relatórios são salvos em `reports/quality/`.
 
+Metodologia detalhada:
+
+- `EVALUATION_METHODOLOGY.md`
+
 ## Teste Rápido do LLM
 
 ```bash
@@ -174,11 +188,10 @@ Temas monitorados:
 
 ## Próximos Passos
 
-1. Implementar coleta real da CVM.
-2. Evoluir persistência em banco de dados (consultas, migrações e escala).
-3. Criar corpus anotado com 30-50 documentos.
-4. Calcular precisão, recall, F1 e acurácia de campos extraídos.
-5. Melhorar filtros e histórico na interface Streamlit.
+1. Revisar manualmente o corpus seed para gerar um gold set validado.
+2. Reexecutar comparação de modelos em janela estável do endpoint LLM.
+3. Consolidar os resultados no relatório final da disciplina.
+4. Evoluir exportações/relatórios para layout final de apresentação, se necessário.
 
 ---
 

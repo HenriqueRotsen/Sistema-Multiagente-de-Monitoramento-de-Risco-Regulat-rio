@@ -8,7 +8,8 @@
 | [GETTING_STARTED.md](GETTING_STARTED.md) | Configuração, execução e testes |
 | [TODO.md](TODO.md) | Pendências e próximos passos |
 | [IMPLEMENTATION_SUMMARY.md](IMPLEMENTATION_SUMMARY.md) | Resumo técnico do que foi implementado |
-| [ARCHITECTURE.md](ARCHITECTURE.md) | Arquitetura detalhada original |
+| [ARCHITECTURE.md](ARCHITECTURE.md) | Arquitetura técnica atualizada do sistema |
+| [EVALUATION_METHODOLOGY.md](EVALUATION_METHODOLOGY.md) | Corpus, métricas e protocolo de avaliação |
 | [PROJECT_STATUS.txt](PROJECT_STATUS.txt) | Status visual resumido |
 
 ## Código Principal
@@ -16,12 +17,12 @@
 | Arquivo | Status | Descrição |
 |---------|--------|-----------|
 | [main.py](main.py) | Funcional | Orquestra coleta, análise e alertas |
-| [app.py](app.py) | Parcial | Interface Streamlit básica |
-| [src/agents/monitor_agent.py](src/agents/monitor_agent.py) | Funcional para BCB | Coleta BCB, deduplica e faz triagem |
+| [app.py](app.py) | Funcional | Interface com filtros, histórico e exportações |
+| [src/agents/monitor_agent.py](src/agents/monitor_agent.py) | Funcional | Coleta BCB/CVM, deduplica e faz triagem |
 | [src/agents/analysis_agent.py](src/agents/analysis_agent.py) | Funcional | Usa LLM ou fallback heurístico |
-| [src/agents/alert_agent.py](src/agents/alert_agent.py) | Funcional | Gera alertas com resumo, impacto e recomendações |
+| [src/agents/alert_agent.py](src/agents/alert_agent.py) | Funcional | Gera alertas e exporta JSON/CSV/HTML/PDF |
 | [src/utils/llm_integration.py](src/utils/llm_integration.py) | Funcional | Cliente Ollama/OpenAI-compatible |
-| [src/utils/data_collection.py](src/utils/data_collection.py) | Parcial | Utilitários e repositório ainda em esqueleto |
+| [src/utils/data_collection.py](src/utils/data_collection.py) | Funcional | Repositório SQLite e histórico de ciclos |
 
 ## Testes
 
@@ -31,6 +32,8 @@
 | [tests/test_analysis_agent.py](tests/test_analysis_agent.py) | Análise com mock de LLM e fallback |
 | [tests/test_llm_integration.py](tests/test_llm_integration.py) | Cliente Ollama e parsing JSON |
 | [tests/test_alert_agent.py](tests/test_alert_agent.py) | Resumo, impacto, recomendações e prioridade |
+| [tests/test_document_repository.py](tests/test_document_repository.py) | Persistência e histórico de ciclos |
+| [tests/test_evaluation.py](tests/test_evaluation.py) | Métricas de avaliação |
 
 Comando:
 
@@ -52,12 +55,12 @@ PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -v
 ```text
 main.py
 ├── MonitorAgent
-│   └── coleta BCB via API pública atual
+│   └── coleta BCB/CVM + deduplicação persistida
 ├── AnalysisAgent
 │   ├── RegulatoryLLM se .env estiver configurado
-│   └── fallback heurístico se LLM falhar
+│   └── fallback heurístico + cache por hash
 └── AlertAgent
-    └── alerta com resumo, impacto, obrigações e recomendações
+    └── alerta + exportações + relatório por ciclo
 ```
 
 ## Comandos Mais Usados
@@ -92,41 +95,27 @@ Smoke test com LLM:
 PYTHONDONTWRITEBYTECODE=1 python3 -c "from main import RegulatoryMonitoringSystem; system=RegulatoryMonitoringSystem(); system.run_monitoring_cycle(manual_documents=[{'id':'teste','title':'Circular de Teste','source':'BCB','document_type':'Circular','url':'https://example.com','content':'O Banco Central determina que as instituições de pagamento deverão atualizar controles antifraude até 30/06/2026.'}])"
 ```
 
-## Tarefas por Prioridade
+## Focos Recomendados
 
-### Alta
-
-1. Criar persistência SQLite.
-2. Persistir documentos, extrações e alertas.
-3. Conectar Streamlit aos dados persistidos.
-
-### Média
-
-1. Implementar coleta CVM.
-2. Adicionar retry/backoff e cache de análises.
-3. Criar export CSV.
-
-### Pesquisa/Avaliação
-
-1. Criar corpus anotado.
-2. Medir precisão, recall, F1 e acurácia de campos.
-3. Comparar modelos LLM.
+1. Revisão manual do corpus anotado seed para gold set.
+2. Reexecução da comparação de modelos em janela de estabilidade do endpoint.
+3. Consolidação do relatório técnico final para entrega.
 
 ## Status Resumido
 
 | Área | Status |
 |------|--------|
 | Coleta BCB | Implementada |
-| Coleta CVM | Pendente |
+| Coleta CVM | Implementada |
 | LLM Ollama | Implementado |
 | OpenAI-compatible | Implementado |
 | Fallback sem LLM | Implementado |
 | Alertas estruturados | Implementado |
-| Banco de dados | Pendente |
-| Corpus anotado | Pendente |
-| Métricas | Pendente |
+| Banco de dados | Implementado |
+| Corpus anotado (seed) | Implementado |
+| Métricas | Implementadas |
 
 ---
 
-**Versão:** 0.2.0  
-**Atualizado em:** 10 de junho de 2026
+**Versão:** 0.8.0  
+**Atualizado em:** 26 de junho de 2026

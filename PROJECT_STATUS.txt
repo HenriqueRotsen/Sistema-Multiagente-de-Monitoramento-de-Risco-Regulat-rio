@@ -3,57 +3,52 @@
         Disciplina: Projeto de Agentes de IA
 ==============================================================================
 
-STATUS DO PROJETO: PROTOTIPO FUNCIONAL COM BCB REAL + LLM
+STATUS DO PROJETO: PIPELINE FUNCIONAL END-TO-END
 
-Atualizado em: 10 de junho de 2026
-Versao: 0.2.0
+Atualizado em: 26 de junho de 2026
+Versao: 0.8.0
 
 ------------------------------------------------------------------------------
 RESUMO
 ------------------------------------------------------------------------------
 
-O sistema ja executa um ciclo completo:
+O sistema executa ciclo completo com persistencia:
 
-1. Coleta publicacoes reais do BCB pela API publica atual.
-2. Filtra itens com sinais regulatorios.
-3. Analisa documentos com LLM quando configurado.
-4. Usa fallback heuristico quando o LLM nao esta disponivel.
-5. Gera alertas com resumo, impacto, obrigacoes e recomendacoes.
-6. Permite visualizacao basica via Streamlit.
+1. Coleta publicacoes regulatorias de BCB e CVM.
+2. Remove duplicatas (memoria + banco).
+3. Analisa com LLM (quando disponivel) ou fallback heuristico.
+4. Gera alertas estruturados e priorizados.
+5. Persiste documentos, extracoes, alertas e historico de ciclos.
+6. Exibe painel Streamlit com filtros e revisao humana persistida.
+7. Exporta alertas e relatorios em JSON/CSV/HTML/PDF.
 
 ------------------------------------------------------------------------------
 IMPLEMENTADO
 ------------------------------------------------------------------------------
 
 [x] Arquitetura de 3 agentes
-[x] Orquestrador principal em main.py
 [x] Coleta real BCB
-[x] Dedupliacao e triagem inicial
-[x] Cliente LLM em src/utils/llm_integration.py
-[x] Suporte ao proxy Ollama da disciplina
-[x] Suporte a APIs OpenAI-compatible
-[x] AnalysisAgent integrado ao pipeline real
-[x] Fallback heuristico sem LLM
-[x] AlertAgent usando resumo, impacto e recomendacoes
-[x] Export JSON
-[x] Interface Streamlit basica
-[x] Testes unitarios com unittest discover
-[x] .gitignore protegendo .env
+[x] Coleta real CVM
+[x] Persistencia SQLite (documents, extractions, alerts, monitoring_cycles)
+[x] Deduplicacao persistida
+[x] Revisao humana persistida
+[x] Cliente LLM Ollama/OpenAI-compatible
+[x] Retry/backoff e timeout por fonte
+[x] Rate limiting e retry para LLM
+[x] Cache de analise por hash de conteudo
+[x] Interface Streamlit com historico e filtros funcionais
+[x] Exportacao JSON/CSV/HTML/PDF
+[x] Relatorio consolidado por ciclo
+[x] Corpus anotado inicial (30 docs)
+[x] Metricas de avaliacao de qualidade
+[x] Testes unitarios automatizados
 
 ------------------------------------------------------------------------------
-PENDENTE
+PONTOS DE ATENCAO
 ------------------------------------------------------------------------------
 
-[ ] Coleta real CVM
-[ ] Banco SQLite / camada de persistencia
-[ ] Historico de documentos processados
-[ ] Revisao humana persistida
-[ ] Dashboard Streamlit com dados persistidos
-[ ] Corpus anotado com 30-50 documentos
-[ ] Metricas de avaliacao
-[ ] Export CSV/HTML/PDF
-[ ] Retry/backoff/rate limiting
-[ ] Cache de analises por hash de conteudo
+- Comparacao de modelos depende da estabilidade do endpoint LLM remoto.
+- Corpus atual foi gerado como seed automatico e requer revisao humana para gold set final.
 
 ------------------------------------------------------------------------------
 COMO TESTAR
@@ -63,70 +58,24 @@ COMO TESTAR
 
    PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -v
 
-   Esperado: Ran 13 tests / OK
+   Esperado: Ran 25 tests / OK
 
-2. Smoke test com LLM:
+2. Pipeline real (com limite):
 
-   PYTHONDONTWRITEBYTECODE=1 python3 -c "from main import RegulatoryMonitoringSystem; system=RegulatoryMonitoringSystem(); system.run_monitoring_cycle(manual_documents=[{'id':'teste','title':'Circular de Teste','source':'BCB','document_type':'Circular','url':'https://example.com','content':'O Banco Central determina que as instituições de pagamento deverão atualizar controles antifraude até 30/06/2026.'}])"
+   python3 main.py --limit 5
 
-3. Pipeline real:
-
-   python3 main.py
-
-4. Interface:
+3. Interface:
 
    streamlit run app.py
 
-------------------------------------------------------------------------------
-CONFIGURACAO LLM
-------------------------------------------------------------------------------
+4. Avaliacao de qualidade (baseline):
 
-Arquivo .env:
-
-LLM_PROVIDER=ollama
-LLM_BASE_URL=https://ollama.futurelab.dcc.ufmg.br
-LLM_API_KEY=sua_chave
-LLM_API_KEY_HEADER=X-API-Key
-LLM_MODEL=llama3.2:3b
-LLM_TIMEOUT_SECONDS=60
-LLM_MAX_TOKENS=1200
-LLM_TEMPERATURE=0.1
-
-BCB_NEWS_API_URL=https://www.bcb.gov.br/api/servico/sitebcb/noticias?quantidade=20
+   PYTHONDONTWRITEBYTECODE=1 python3 scripts/evaluate_analysis_quality.py --corpus data/corpus/annotated_corpus.jsonl --heuristic-only
 
 ------------------------------------------------------------------------------
-PROGRESSO ESTIMADO
+PROXIMO FOCO RECOMENDADO
 ------------------------------------------------------------------------------
 
-Arquitetura:        100%
-Coleta BCB:          90%
-Coleta CVM:           0%
-Analise LLM:         90%
-Fallback heuristico: 70%
-Alertas:             90%
-Interface:           70%
-Persistencia:         0%
-Testes:              60%
-Avaliacao:            0%
-
-TOTAL: aproximadamente 65% da implementacao funcional planejada.
-
-------------------------------------------------------------------------------
-PROXIMO PASSO RECOMENDADO
-------------------------------------------------------------------------------
-
-Implementar persistencia SQLite.
-
-Por que agora:
-- evita reprocessar documentos a cada execucao;
-- permite historico na interface;
-- permite status de revisao humana real;
-- cria base para metricas e avaliacao;
-- facilita adicionar a CVM sem baguncar o fluxo.
-
-Ordem sugerida:
-1. Criar database/schema.sql.
-2. Implementar DocumentRepository.
-3. Integrar duplicatas persistentes ao MonitorAgent.
-4. Salvar analises e alertas.
-5. Ler historico no Streamlit.
+1. Revisao manual do corpus anotado.
+2. Reexecucao da comparacao de modelos em janela de estabilidade do endpoint LLM.
+3. Consolidacao de resultados para relatorio final da disciplina.

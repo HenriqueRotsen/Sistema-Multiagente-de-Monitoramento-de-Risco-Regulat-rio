@@ -629,6 +629,37 @@ class DocumentRepository:
             ).fetchall()
         return [dict(row) for row in rows]
 
+    def get_pending_documents(self, limit: int = 50) -> List[Dict[str, Any]]:
+        """Retorna documentos coletados mas ainda não processados."""
+        safe_limit = max(1, int(limit or 50))
+        with self._get_connection() as conn:
+            rows = conn.execute(
+                """
+                SELECT id, title, source, document_type, url, content, published_date, metadata_json
+                FROM documents
+                WHERE processed = 0
+                ORDER BY datetime(collected_at) DESC
+                LIMIT ?
+                """,
+                (safe_limit,),
+            ).fetchall()
+
+        pending_docs: List[Dict[str, Any]] = []
+        for row in rows:
+            pending_docs.append(
+                {
+                    "id": row["id"],
+                    "title": row["title"],
+                    "source": row["source"],
+                    "document_type": row["document_type"],
+                    "url": row["url"],
+                    "content": row["content"] or "",
+                    "published_date": row["published_date"],
+                    "metadata": json.loads(row["metadata_json"] or "{}"),
+                }
+            )
+        return pending_docs
+
     def update_processing_status(self, doc_id: str, status: str) -> bool:
         """Atualiza status de processamento"""
         normalized = (status or "").strip().lower()

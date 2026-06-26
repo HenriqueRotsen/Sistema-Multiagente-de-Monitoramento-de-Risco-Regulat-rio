@@ -5,6 +5,9 @@ from typing import List, Dict, Any, Optional
 from dataclasses import dataclass
 from datetime import datetime
 from enum import Enum
+import csv
+from html import escape
+from io import StringIO
 import json
 import logging
 
@@ -325,17 +328,250 @@ class AlertAgent:
         """
         Exporta alertas.
 
-        Implementado: JSON.
-        Pendentes: CSV para planilhas, HTML para portal e PDF para relatorios.
+        Formatos suportados: JSON, CSV, HTML e PDF.
         """
+        data = [a.to_dict() for a in alerts]
         if format == "json":
-            return json.dumps(
-                [a.to_dict() for a in alerts],
-                ensure_ascii=False,
-                indent=2
+            return json.dumps(data, ensure_ascii=False, indent=2)
+        if format == "csv":
+            return self._export_csv(data)
+        if format == "html":
+            return self._export_html(data, title="Relatório de Alertas Regulatórios")
+        if format == "pdf":
+            text_report = self._export_text_report(data, "Relatório de Alertas Regulatórios")
+            return self._build_simple_pdf(text_report)
+        raise ValueError(f"Formato não implementado: {format}")
+
+    def export_alert_dicts(self, alerts: List[Dict[str, Any]], format: str = "json") -> str:
+        """Exporta alertas já serializados (vindos de persistência)."""
+        if format == "json":
+            return json.dumps(alerts, ensure_ascii=False, indent=2)
+        if format == "csv":
+            return self._export_csv(alerts)
+        if format == "html":
+            return self._export_html(alerts, title="Relatório de Alertas Regulatórios")
+        if format == "pdf":
+            return self._build_simple_pdf(self._export_text_report(alerts, "Relatório de Alertas Regulatórios"))
+        raise ValueError(f"Formato não implementado: {format}")
+
+    def export_cycle_report(self, cycle_result: Dict[str, Any], format: str = "json") -> str:
+        """Exporta relatório consolidado de um ciclo."""
+        alerts = cycle_result.get("alerts", [])
+        report = {
+            "cycle_id": cycle_result.get("cycle_id"),
+            "started_at": cycle_result.get("started_at"),
+            "finished_at": cycle_result.get("finished_at"),
+            "documents_collected": cycle_result.get("documents_collected", 0),
+            "documents_analyzed": cycle_result.get("documents_analyzed", 0),
+            "alerts_generated": cycle_result.get("alerts_generated", 0),
+            "errors": cycle_result.get("errors", []),
+            "summary": cycle_result.get("summary", {}),
+            "alerts": alerts,
+        }
+        if format == "json":
+            return json.dumps(report, ensure_ascii=False, indent=2)
+        if format == "html":
+            return self._export_cycle_html(report)
+        if format == "pdf":
+            text_report = self._export_cycle_text(report)
+            return self._build_simple_pdf(text_report)
+        raise ValueError(f"Formato não implementado para ciclo: {format}")
+
+    def _export_csv(self, data: List[Dict[str, Any]]) -> str:
+        output = StringIO()
+        writer = csv.writer(output)
+        writer.writerow(
+            [
+                "alert_id",
+                "created_at",
+                "priority",
+                "regulatory_body",
+                "document_title",
+                "document_type",
+                "summary",
+                "impact_assessment",
+                "confidence_level",
+                "human_reviewed",
+                "source_url",
+                "affected_activities",
+                "obligations",
+                "recommendations",
+            ]
+        )
+        for alert in data:
+            writer.writerow(
+                [
+                    alert.get("alert_id", ""),
+                    alert.get("created_at", ""),
+                    alert.get("priority", ""),
+                    alert.get("regulatory_body", ""),
+                    alert.get("document_title", ""),
+                    alert.get("document_type", ""),
+                    alert.get("summary", ""),
+                    alert.get("impact_assessment", ""),
+                    alert.get("confidence_level", ""),
+                    bool(alert.get("human_reviewed")),
+                    alert.get("source_url", ""),
+                    " | ".join(alert.get("affected_activities", [])),
+                    " | ".join(alert.get("obligations", [])),
+                    " | ".join(alert.get("recommendations", [])),
+                ]
             )
-        else:
-            return "Formato não implementado"
+        return output.getvalue()
+
+    def _export_html(self, data: List[Dict[str, Any]], title: str) -> str:
+        rows = []
+        for alert in data:
+            rows.append(
+                "<tr>"
+                f"<td>{escape(alert.get('alert_id', ''))}</td>"
+                f"<td>{escape(alert.get('priority', ''))}</td>"
+                f"<td>{escape(alert.get('regulatory_body', ''))}</td>"
+                f"<td>{escape(alert.get('document_title', ''))}</td>"
+                f"<td>{escape(alert.get('summary', ''))}</td>"
+                f"<td>{escape(alert.get('impact_assessment', ''))}</td>"
+                f"<td>{escape(str(alert.get('human_reviewed', False)))}</td>"
+                "</tr>"
+            )
+        rows_html = "\n".join(rows)
+        return f"""<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <title>{escape(title)}</title>
+  <style>
+    body {{ font-family: Arial, sans-serif; margin: 24px; }}
+    table {{ border-collapse: collapse; width: 100%; }}
+    th, td {{ border: 1px solid #ccc; padding: 8px; vertical-align: top; }}
+    th {{ background: #f0f0f0; text-align: left; }}
+  </style>
+</head>
+<body>
+  <h1>{escape(title)}</h1>
+  <p>Total de alertas: {len(data)}</p>
+  <table>
+    <thead>
+      <tr>
+        <th>ID</th><th>Prioridade</th><th>Regulador</th><th>Documento</th><th>Resumo</th><th>Impacto</th><th>Revisado</th>
+      </tr>
+    </thead>
+    <tbody>
+      {rows_html}
+    </tbody>
+  </table>
+</body>
+</html>"""
+
+    def _export_text_report(self, data: List[Dict[str, Any]], title: str) -> str:
+        lines = [title, f"Total de alertas: {len(data)}", ""]
+        for alert in data:
+            lines.extend(
+                [
+                    f"- {alert.get('alert_id', '')} | {alert.get('priority', '')} | {alert.get('regulatory_body', '')}",
+                    f"  Documento: {alert.get('document_title', '')}",
+                    f"  Resumo: {alert.get('summary', '')}",
+                    f"  Impacto: {alert.get('impact_assessment', '')}",
+                    f"  Revisado: {alert.get('human_reviewed', False)}",
+                    "",
+                ]
+            )
+        return "\n".join(lines).strip() + "\n"
+
+    def _export_cycle_html(self, report: Dict[str, Any]) -> str:
+        summary = report.get("summary", {})
+        by_priority = summary.get("by_priority", {})
+        priority_items = "".join(
+            f"<li>{escape(priority)}: {count}</li>"
+            for priority, count in by_priority.items()
+        )
+        alerts_html = self._export_html(report.get("alerts", []), "Alertas do ciclo")
+        return f"""<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <title>Relatório consolidado do ciclo {escape(str(report.get("cycle_id", "")))}</title>
+</head>
+<body>
+  <h1>Relatório consolidado do ciclo</h1>
+  <p><strong>Ciclo:</strong> {escape(str(report.get("cycle_id", "")))}</p>
+  <p><strong>Início:</strong> {escape(str(report.get("started_at", "")))}</p>
+  <p><strong>Fim:</strong> {escape(str(report.get("finished_at", "")))}</p>
+  <p><strong>Documentos coletados:</strong> {report.get("documents_collected", 0)}</p>
+  <p><strong>Documentos analisados:</strong> {report.get("documents_analyzed", 0)}</p>
+  <p><strong>Alertas gerados:</strong> {report.get("alerts_generated", 0)}</p>
+  <h2>Distribuição por prioridade</h2>
+  <ul>{priority_items}</ul>
+  <h2>Alertas</h2>
+  {alerts_html}
+</body>
+</html>"""
+
+    def _export_cycle_text(self, report: Dict[str, Any]) -> str:
+        lines = [
+            f"Relatório consolidado do ciclo {report.get('cycle_id', '')}",
+            f"Início: {report.get('started_at', '')}",
+            f"Fim: {report.get('finished_at', '')}",
+            f"Documentos coletados: {report.get('documents_collected', 0)}",
+            f"Documentos analisados: {report.get('documents_analyzed', 0)}",
+            f"Alertas gerados: {report.get('alerts_generated', 0)}",
+            "",
+            "Alertas:",
+            self._export_text_report(report.get("alerts", []), "Lista de alertas"),
+        ]
+        return "\n".join(lines).strip() + "\n"
+
+    def _build_simple_pdf(self, text_content: str) -> bytes:
+        """Gera PDF simples a partir de texto."""
+        escaped_text = text_content.replace("\\", "\\\\").replace("(", "\\(").replace(")", "\\)")
+        escaped_text = escaped_text.replace("\r", "")
+        lines = escaped_text.split("\n")
+        y = 780
+        commands = ["BT", "/F1 10 Tf", "40 800 Td", "14 TL"]
+        for line in lines:
+            safe_line = line[:120].encode("latin-1", errors="replace").decode("latin-1")
+            commands.append(f"({safe_line}) Tj")
+            commands.append("T*")
+            y -= 14
+            if y < 40:
+                commands.append("ET")
+                commands.append("BT")
+                commands.append("/F1 10 Tf")
+                commands.append("40 800 Td")
+                commands.append("14 TL")
+                y = 780
+        commands.append("ET")
+        stream = "\n".join(commands) + "\n"
+
+        objects = []
+        objects.append("1 0 obj << /Type /Catalog /Pages 2 0 R >> endobj\n")
+        objects.append("2 0 obj << /Type /Pages /Count 1 /Kids [3 0 R] >> endobj\n")
+        objects.append(
+            "3 0 obj << /Type /Page /Parent 2 0 R /MediaBox [0 0 595 842] "
+            "/Resources << /Font << /F1 4 0 R >> >> /Contents 5 0 R >> endobj\n"
+        )
+        objects.append("4 0 obj << /Type /Font /Subtype /Type1 /BaseFont /Helvetica >> endobj\n")
+        objects.append(f"5 0 obj << /Length {len(stream.encode('latin-1', errors='replace'))} >> stream\n{stream}endstream endobj\n")
+
+        pdf_header = "%PDF-1.4\n"
+        offsets = [0]
+        body = ""
+        current_offset = len(pdf_header.encode("latin-1"))
+        for obj in objects:
+            offsets.append(current_offset)
+            body += obj
+            current_offset += len(obj.encode("latin-1", errors="replace"))
+
+        xref_offset = current_offset
+        xref_lines = ["xref", f"0 {len(offsets)}", "0000000000 65535 f "]
+        for offset in offsets[1:]:
+            xref_lines.append(f"{offset:010d} 00000 n ")
+        xref = "\n".join(xref_lines) + "\n"
+        trailer = (
+            f"trailer << /Size {len(offsets)} /Root 1 0 R >>\n"
+            f"startxref\n{xref_offset}\n%%EOF\n"
+        )
+        pdf = pdf_header + body + xref + trailer
+        return pdf.encode("latin-1", errors="replace")
 
     def get_alert_summary(self) -> Dict[str, Any]:
         """Retorna resumo dos alertas gerados"""

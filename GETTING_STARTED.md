@@ -82,12 +82,12 @@ Abra o endereço indicado pelo Streamlit e clique em **Executar Ciclo de Monitor
 
 Status atual da interface:
 
-- dashboard básico
-- execução do ciclo
-- visualização de alertas
-- export JSON
-- filtros visuais ainda parcialmente conectados
-- revisão humana ainda não persistida
+- dashboard com métricas persistidas
+- histórico de ciclos executados
+- filtros funcionais (regulador, prioridade, atividade afetada, revisão)
+- revisão humana persistida
+- exportação de alertas em JSON/CSV/HTML/PDF
+- exportação de relatório consolidado do ciclo (JSON/HTML/PDF)
 
 ## 6. Testes Automatizados
 
@@ -98,18 +98,21 @@ PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -v
 Resultado esperado:
 
 ```text
-Ran 13 tests
+Ran 25 tests
 OK
 ```
 
 Os testes cobrem:
 
 - coleta BCB via API atual e RSS mockado
+- coleta CVM com paginação e normalização
 - análise com mock de LLM
 - fallback heurístico
 - cliente Ollama com `X-API-Key`
 - alertas com resumo, impacto e recomendações
 - prioridade com prazo vencido
+- persistência SQLite e histórico de ciclos
+- métricas de avaliação de qualidade
 
 ## 7. Configurações de LLM Suportadas
 
@@ -146,12 +149,8 @@ LLM_MODEL=gpt-4o-mini
 
 ## 9. Próximo Desenvolvimento Recomendado
 
-Implementar persistência SQLite:
+Com o pipeline principal concluído, o próximo foco recomendado é qualidade operacional e entrega final:
 
-1. Criar `database/schema.sql`.
-2. Implementar `DocumentRepository`.
-3. Evitar reprocessamento dos mesmos documentos.
-4. Persistir alertas e revisão humana.
-5. Alimentar a interface Streamlit com histórico real.
-
-Depois disso, implementar a coleta CVM fica mais útil, porque o sistema já terá histórico e controle de duplicatas persistente.
+1. Revisar manualmente o corpus anotado (`data/corpus/annotated_corpus.jsonl`) para transformar seed automático em gold set humano.
+2. Reexecutar comparação de modelos quando o endpoint LLM estiver estável.
+3. Consolidar resultados finais em relatório para apresentação da disciplina.

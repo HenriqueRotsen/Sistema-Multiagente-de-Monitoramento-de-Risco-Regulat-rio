@@ -164,6 +164,12 @@ class RegulatoryMonitoringSystem:
         collected = self.monitor_agent.monitor_sources()
         unique_documents = self.monitor_agent.eliminate_duplicates(collected)
         screened_documents = self.monitor_agent.initial_screening(unique_documents)
+        if unique_documents and not screened_documents:
+            logger.warning(
+                "Triagem inicial retornou 0 itens após %s documentos únicos; usando lista sem triagem para evitar ciclo vazio.",
+                len(unique_documents),
+            )
+            screened_documents = unique_documents
 
         documents_as_dict = [
             {
@@ -183,6 +189,17 @@ class RegulatoryMonitoringSystem:
 
         for doc in documents_as_dict:
             self.repository.add_document(doc)
+
+        if not documents_as_dict:
+            pending_limit = limit if limit is not None else 10
+            pending_docs = self.repository.get_pending_documents(limit=pending_limit)
+            if pending_docs:
+                logger.info(
+                    "Nenhum documento novo nas fontes; reutilizando %s documentos pendentes do banco.",
+                    len(pending_docs),
+                )
+                return pending_docs
+
         return documents_as_dict
 
     def _analyze_documents(self, documents: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
@@ -290,6 +307,14 @@ class RegulatoryMonitoringSystem:
     def get_cycle_history(self, limit: int = 20) -> List[Dict[str, Any]]:
         """Retorna histórico de ciclos persistidos."""
         return self.repository.get_monitoring_cycles(limit=limit)
+
+    def export_alerts(self, alerts: List[Dict[str, Any]], format: str = "json") -> str:
+        """Exporta lista de alertas persistidos em múltiplos formatos."""
+        return self.alert_agent.export_alert_dicts(alerts=alerts, format=format)
+
+    def export_cycle_report(self, cycle_result: Dict[str, Any], format: str = "json") -> str:
+        """Exporta relatório consolidado de um ciclo específico."""
+        return self.alert_agent.export_cycle_report(cycle_result=cycle_result, format=format)
 
 
 def main():

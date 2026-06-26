@@ -1,259 +1,222 @@
 # Arquitetura do Sistema Multiagente
 
-Este documento descreve o estado atual do sistema. O prototipo ja executa um ciclo completo para publicacoes do Banco Central do Brasil, com analise por LLM quando configurado e fallback heuristico quando o LLM nao estiver disponivel.
+Este documento descreve a arquitetura implementada no projeto após integração de coleta BCB/CVM, persistência SQLite, avaliação de qualidade, robustez operacional e interface Streamlit com histórico e exportação.
 
-## Visao Geral
+## Visão Geral Atual
 
 ```text
-Fontes regulatorias
-  - BCB API publica atual
-  - RSS/XML legado opcional
-  - CVM pendente
+Fontes Regulatórias
+  - BCB API pública (notícias regulatórias)
+  - RSS/XML legado opcional (BCB)
+  - CVM (legislação com paginação)
         |
         v
 Monitor Agent
-  - coleta publicacoes
-  - normaliza metadados
-  - filtra itens regulatorios
-  - remove duplicatas em memoria
+  - coleta por fonte
+  - normaliza em RegulatoryDocument
+  - filtra tipos regulatórios
+  - aplica deduplicação em memória + banco
+  - retry/backoff + timeout por fonte
         |
         v
 Analysis Agent
-  - chama LLM configurado
-  - aplica fallback heuristico em caso de falha
-  - extrai resumo, datas, entidades, obrigacoes, impacto e recomendacoes
+  - usa LLM (Ollama/OpenAI-compatible) se disponível
+  - fallback heurístico em erro/ausência
+  - extrai resumo, datas, obrigações, atividades, impacto
+  - cache de análise por hash de conteúdo
         |
         v
 Alert Agent
-  - calcula prioridade
-  - consolida resumo e impacto
-  - formata alerta para triagem humana
-  - exporta JSON
+  - cria StructuredAlert
+  - prioriza por prazo/impacto
+  - exporta JSON/CSV/HTML/PDF
+  - gera relatório consolidado por ciclo (JSON/HTML/PDF)
         |
         v
-Console / Streamlit / Validacao humana
+Persistência (SQLite)
+  - documents
+  - extractions
+  - alerts
+  - monitoring_cycles
+        |
+        v
+Interface Streamlit / Console / Revisão Humana
+  - dashboard com métricas e histórico de ciclos
+  - filtros por prioridade, regulador, atividade e revisão
+  - marcação de revisão persistida
+  - downloads de alertas e relatório de ciclo
 ```
 
 ## Componentes
 
-### Monitor Agent
+### 1. Monitor Agent
 
 Arquivo: `src/agents/monitor_agent.py`
 
-Responsabilidades atuais:
+Responsabilidades:
 
-- Coletar publicacoes do BCB pela API `https://www.bcb.gov.br/api/servico/sitebcb/noticias`.
-- Aceitar RSS/XML legado quando `BCB_RSS_URL` ou uma URL `.xml` for configurada.
-- Limpar HTML e normalizar campos para `RegulatoryDocument`.
-- Detectar atos normativos por titulo e resumo.
-- Deduplicar documentos por titulo, fonte e data.
+- Coleta BCB por API pública atual.
+- Suporte opcional a RSS/XML legado.
+- Coleta CVM por listagem oficial de legislação com paginação.
+- Normalização para `RegulatoryDocument`.
+- Filtro de conteúdo regulatório e deduplicação.
+- Retry/backoff e timeout configurável por fonte.
 
-Pendencias:
+Configurações relevantes:
 
-- Persistir documentos processados em banco para evitar reprocessamento entre execucoes.
-- Implementar coleta real da CVM.
-- Baixar e processar documentos anexos quando a publicacao apontar para PDF ou pagina normativa detalhada.
+- `BCB_NEWS_API_URL`
+- `CVM_LEGISLATION_URL`
+- `CVM_MAX_PAGES`
+- `BCB_TIMEOUT_SECONDS`
+- `CVM_TIMEOUT_SECONDS`
+- `SOURCE_RETRY_ATTEMPTS`
+- `SOURCE_RETRY_BACKOFF_SECONDS`
 
-### Analysis Agent
+### 2. Analysis Agent
 
 Arquivo: `src/agents/analysis_agent.py`
 
-Responsabilidades atuais:
+Responsabilidades:
 
-- Receber texto e metadados do documento.
-- Usar `RegulatoryLLM` quando configurado.
-- Solicitar JSON estruturado ao LLM com resumo, datas, atividades afetadas, entidades, obrigacoes, recomendacoes, palavras-chave, impacto e confiancas.
-- Aplicar fallback heuristico local para resumo, datas contextuais, obrigacoes, entidades, palavras-chave, impacto e recomendacoes.
+- Recebe texto + metadados de documento.
+- Realiza extração estruturada em dois modos:
+  - `llm`: via `RegulatoryLLM`;
+  - `regex`: fallback heurístico local.
+- Extrai:
+  - resumo;
+  - datas de vigência/prazo;
+  - obrigações;
+  - atividades e entidades afetadas;
+  - impacto e recomendações.
 
-Modos de extracao:
-
-- `llm`: resposta estruturada vinda do modelo.
-- `regex`: fallback local baseado em regras simples.
-
-Pendencias:
-
-- Melhorar validacao do JSON retornado pelo LLM.
-- Criar corpus anotado para medir qualidade das extracoes.
-- Adicionar recuperacao semantica/embeddings se o projeto crescer para documentos longos.
-
-### Alert Agent
-
-Arquivo: `src/agents/alert_agent.py`
-
-Responsabilidades atuais:
-
-- Gerar `StructuredAlert` a partir de `ExtractedInfo`.
-- Definir prioridade por prazo e impacto.
-- Usar resumo, impacto e recomendacoes produzidos pela analise.
-- Formatar alerta legivel no console.
-- Exportar alertas em JSON.
-
-Pendencias:
-
-- Exportar CSV, HTML e PDF.
-- Persistir revisao humana.
-- Criar canal de notificacao, como email, somente depois de existir revisao e historico.
-
-### LLM Integration
+### 3. LLM Integration
 
 Arquivo: `src/utils/llm_integration.py`
 
-Responsabilidades atuais:
+Responsabilidades:
 
-- Ler configuracao por variaveis de ambiente.
-- Suportar provider `ollama` via `/api/chat`.
-- Suportar provider `openai` via `/chat/completions`.
-- Enviar `X-API-Key` para o proxy Ollama da disciplina quando configurado.
-- Retornar JSON validado minimamente para o `AnalysisAgent`.
+- Cliente para provedores:
+  - `ollama` (`/api/chat`, `X-API-Key`);
+  - `openai` (`/chat/completions`).
+- Retry/backoff em chamadas HTTP.
+- Rate limiting local por requisição.
+- Normalização de saída JSON para schema estável.
 
-Variaveis principais:
+Configurações relevantes:
 
-```env
-LLM_PROVIDER=ollama
-LLM_BASE_URL=https://ollama.futurelab.dcc.ufmg.br
-LLM_API_KEY=sua_chave
-LLM_API_KEY_HEADER=X-API-Key
-LLM_MODEL=llama3.2:3b
-LLM_TIMEOUT_SECONDS=60
-LLM_MAX_TOKENS=1200
-LLM_TEMPERATURE=0.1
-```
+- `LLM_PROVIDER`
+- `LLM_BASE_URL`
+- `LLM_API_KEY`
+- `LLM_API_KEY_HEADER`
+- `LLM_MODEL`
+- `LLM_TIMEOUT_SECONDS`
+- `LLM_MAX_TOKENS`
+- `LLM_TEMPERATURE`
+- `LLM_MAX_RETRIES`
+- `LLM_RETRY_BACKOFF_SECONDS`
+- `LLM_RATE_LIMIT_PER_MINUTE`
 
-### Interface Streamlit
+### 4. Alert Agent
+
+Arquivo: `src/agents/alert_agent.py`
+
+Responsabilidades:
+
+- Construção de `StructuredAlert` por documento analisado.
+- Priorização (`CRÍTICO`, `ALTO`, `MÉDIO`, `BAIXO`).
+- Formatação para triagem humana.
+- Exportação:
+  - alertas: `json`, `csv`, `html`, `pdf`;
+  - ciclo consolidado: `json`, `html`, `pdf`.
+
+### 5. Repositório e Persistência
+
+Arquivo: `src/utils/data_collection.py` (`DocumentRepository`)
+
+Banco SQLite:
+
+- `documents`: documentos coletados e status.
+- `extractions`: extrações estruturadas por documento.
+- `alerts`: alertas e revisão humana.
+- `monitoring_cycles`: histórico resumido de execução.
+
+Capacidades:
+
+- deduplicação persistida;
+- cache por hash de conteúdo;
+- estatísticas operacionais;
+- recuperação de histórico para interface.
+
+### 6. Orquestrador
+
+Arquivo: `main.py`
+
+Pipeline por ciclo:
+
+1. coleta e persistência de documentos;
+2. análise (com cache por hash);
+3. geração e persistência de alertas;
+4. persistência de resumo do ciclo em `monitoring_cycles`.
+
+Extras:
+
+- suporte a `--limit N` para ciclos menores;
+- logging em console e opcional em arquivo (`LOG_FILE`).
+
+### 7. Interface Streamlit
 
 Arquivo: `app.py`
 
-Responsabilidades atuais:
+Funcionalidades:
 
-- Mostrar dashboard basico.
-- Executar ciclo de monitoramento.
-- Exibir alertas.
-- Exportar JSON.
+- Dashboard com métricas de alertas e histórico de ciclos.
+- Filtros funcionais de alertas:
+  - regulador;
+  - prioridade;
+  - atividade afetada;
+  - status de revisão;
+  - confiança mínima.
+- Marcação de revisão persistida.
+- Download de alertas e relatório de ciclo em múltiplos formatos.
 
-Pendencias:
-
-- Conectar filtros a dados persistidos.
-- Exibir historico real.
-- Registrar revisao humana.
-
-## Estruturas De Dados
+## Modelo de Dados (Resumo)
 
 ### RegulatoryDocument
 
-```python
-{
-    "id": "bcb-...",
-    "title": "Resolucao BCB ...",
-    "source": "BCB",
-    "document_type": "Resolucao",
-    "published_date": datetime(...),
-    "url": "https://www.bcb.gov.br/detalhenoticia/...",
-    "content": "Texto limpo da publicacao",
-    "metadata": {
-        "feed_url": "...",
-        "raw_id": "...",
-        "collected_at": "...",
-        "published_raw": "..."
-    },
-    "processed": False,
-    "relevance_score": 0.0
-}
-```
+- id, título, fonte, tipo documental, data, URL, conteúdo, metadados.
 
 ### ExtractedInfo
 
-```python
-{
-    "document_id": "bcb-...",
-    "regulatory_body": "BCB",
-    "document_type": "Resolucao",
-    "title": "...",
-    "summary": "...",
-    "effective_date": datetime(...),
-    "implementation_deadline": datetime(...),
-    "affected_activities": ["Pix", "Autenticacao e seguranca"],
-    "affected_entities": ["instituicoes de pagamento"],
-    "obligations": ["..."],
-    "keywords": ["pix", "seguranca"],
-    "recommendations": ["..."],
-    "impact_score": 0.75,
-    "impact_description": "...",
-    "impact_areas": ["Compliance", "Tecnologia"],
-    "confidence_scores": {
-        "summary": 0.8,
-        "dates": 0.7,
-        "obligations": 0.7,
-        "impact": 0.7
-    },
-    "extraction_method": "llm"
-}
-```
+- resumo, datas, obrigações, atividades afetadas, impacto, recomendações, confiança, método de extração.
 
 ### StructuredAlert
 
-```python
-{
-    "alert_id": "ALR-20260610120000123456",
-    "created_at": "2026-06-10T12:00:00",
-    "regulatory_body": "BCB",
-    "document_title": "...",
-    "document_type": "Resolucao",
-    "source_url": "https://...",
-    "summary": "...",
-    "priority": "ALTO",
-    "affected_activities": ["..."],
-    "obligations": ["..."],
-    "effective_date": "2026-01-01T00:00:00",
-    "implementation_deadline": "2026-06-30T00:00:00",
-    "days_until_deadline": 20,
-    "confidence_level": "MEDIA",
-    "impact_assessment": "...",
-    "recommendations": ["..."],
-    "human_reviewed": false
-}
-```
+- identificador, metadados do documento, prioridade, resumo/impacto, obrigações, prazo, confiança, revisão humana.
 
-## Fluxo De Execucao
+## Fluxo de Avaliação de Qualidade
 
-1. `main.py` carrega `.env`, se `python-dotenv` estiver instalado.
-2. `RegulatoryLLM.from_env()` tenta montar o cliente de LLM.
-3. `MonitorAgent.monitor_sources()` coleta publicacoes reais do BCB.
-4. `MonitorAgent.initial_screening()` mantem itens com sinais regulatorios.
-5. `AnalysisAgent.analyze_document()` chama o LLM ou usa fallback.
-6. `AlertAgent.batch_generate_alerts()` cria e prioriza alertas.
-7. Os alertas sao exibidos no console e podem ser exportados em JSON.
+Arquivos:
 
-## Proximo Passo Tecnico
+- `scripts/build_annotated_corpus.py`
+- `scripts/evaluate_analysis_quality.py`
+- `src/utils/evaluation.py`
 
-A proxima melhoria recomendada e implementar persistencia SQLite:
+Etapas:
 
-```text
-database/schema.sql
-src/utils/data_collection.py ou novo repository.py
+1. gerar corpus anotado inicial (seed);
+2. executar baseline heurístico;
+3. comparar modelos LLM configurados;
+4. registrar relatório em `reports/quality/`.
 
-tables:
-  documents
-  analyses
-  alerts
-  reviews
-```
+## Governança
 
-Isso resolve tres lacunas importantes:
-
-- evita reprocessamento dos mesmos documentos;
-- permite historico na interface;
-- abre caminho para revisao humana persistente e metricas.
-
-## Governanca
-
-- O sistema nao substitui analise juridica.
-- Todo alerta deve passar por revisao humana.
-- O LLM pode errar ou inferir campos ausentes.
-- A URL da fonte e preservada para rastreabilidade.
-- A pontuacao de confianca e apenas um sinal auxiliar.
+- O sistema não substitui análise jurídica.
+- Todo alerta exige validação humana.
+- Confiança é sinal auxiliar e não decisão automática.
+- Rastreabilidade da fonte é preservada.
 
 ---
 
-**Versao documentada:** 0.2.0  
-**Atualizado em:** 2026-06-10  
-**Status:** Prototipo funcional com BCB + LLM + fallback heuristico.
+**Versão documentada:** 0.8.0  
+**Atualizado em:** 2026-06-26  
+**Status:** Pipeline funcional com coleta BCB/CVM, persistência, interface avançada e avaliação inicial de qualidade.

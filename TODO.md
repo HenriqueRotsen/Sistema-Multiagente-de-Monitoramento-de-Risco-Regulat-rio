@@ -62,7 +62,7 @@ Este checklist reflete o estado atual do projeto após a coleta real do BCB e a 
 - [x] Testes do `AlertAgent`
 - [x] Descoberta padrão com `unittest discover`
 
-## Pendente
+## Pendências Estratégicas
 
 ### 1. Coleta CVM
 - [x] Implementar `_fetch_cvm_documents()`
@@ -126,31 +126,30 @@ Este checklist reflete o estado atual do projeto após a coleta real do BCB e a 
 ### 6. Exportação e Relatórios
 - [x] JSON
 - [x] CSV
-- [ ] HTML
-- [ ] PDF
-- [ ] Relatório consolidado por ciclo
+- [x] HTML
+- [x] PDF
+- [x] Relatório consolidado por ciclo
 
 ### 7. Documentação
 - [x] README alinhado ao estado atual
 - [x] Guia de início atualizado
 - [x] TODO atualizado
 - [x] Status/índice atualizados
-- [ ] Atualizar diagramas detalhados em `ARCHITECTURE.md`
-- [ ] Documentar corpus e metodologia de avaliação quando existirem
+- [x] Atualizar diagramas detalhados em `ARCHITECTURE.md`
+- [x] Documentar corpus e metodologia de avaliação quando existirem
 
 ## Próximo Passo Recomendado
 
-**Implementar persistência mínima em SQLite antes de expandir para CVM.**
+**Consolidar a qualidade da avaliação com revisão humana do corpus seed.**
 
-Motivo: sem histórico persistido, o sistema reprocessa os mesmos documentos a cada execução e a interface não consegue mostrar revisão, histórico ou métricas de uso de forma confiável.
+Motivo: o pipeline técnico está funcional, mas a validação acadêmica final depende de um gold set anotado manualmente para reduzir viés de autoanotação.
 
 Ordem sugerida:
 
-1. Criar `database/schema.sql`.
-2. Implementar `DocumentRepository` em `src/utils/data_collection.py`.
-3. Fazer `MonitorAgent` consultar duplicatas no repositório.
-4. Salvar alertas gerados.
-5. Atualizar Streamlit para ler alertas persistidos.
+1. Revisar manualmente `data/corpus/annotated_corpus.jsonl`.
+2. Congelar uma versão de corpus para benchmark.
+3. Reexecutar comparação de modelos em janela estável do endpoint LLM.
+4. Consolidar relatório final de resultados.
 
 ## Comandos Úteis
 

@@ -1,189 +1,86 @@
 # Resumo da Implementação
 
-**Status:** protótipo funcional com coleta BCB real, análise via LLM e alertas estruturados  
-**Última atualização:** 10 de junho de 2026  
-**Versão:** 0.2.0
+**Status:** pipeline funcional ponta a ponta com coleta BCB/CVM, persistência, análise (LLM + fallback), interface e avaliação inicial  
+**Última atualização:** 26 de junho de 2026  
+**Versão:** 0.8.0
 
-## O Que Está Implementado
+## Entregas Concluídas
 
-### Arquitetura Multiagente
+### Núcleo multiagente
 
-- `MonitorAgent`: coleta, deduplicação e triagem inicial.
-- `AnalysisAgent`: análise estruturada com LLM ou fallback heurístico.
-- `AlertAgent`: geração, priorização, formatação e exportação JSON de alertas.
-- `RegulatoryMonitoringSystem`: orquestra o ciclo completo em `main.py`.
+- `MonitorAgent`: coleta BCB/CVM, triagem regulatória, deduplicação e robustez de acesso.
+- `AnalysisAgent`: extração estruturada com LLM e fallback heurístico.
+- `AlertAgent`: priorização, formatação e exportação de alertas.
+- `RegulatoryMonitoringSystem`: orquestração completa do ciclo com persistência.
 
-### Coleta BCB
+### Coleta regulatória
 
-- Coleta real pela API pública atual do BCB:
-  - `https://www.bcb.gov.br/api/servico/sitebcb/noticias?quantidade=20`
-- Normalização para `RegulatoryDocument`.
-- Filtro de itens com indícios regulatórios.
-- Detecção de tipos como Resolução, Circular, Comunicado e Consulta Pública.
-- Suporte a RSS/XML legado quando uma URL `.xml` é configurada.
+- BCB via API pública atual e suporte RSS/XML legado.
+- CVM via página oficial de legislação com paginação e normalização de tipos documentais.
 
-### Integração LLM
+### Persistência e histórico
 
-Arquivo: `src/utils/llm_integration.py`
+- SQLite com tabelas:
+  - `documents`
+  - `extractions`
+  - `alerts`
+  - `monitoring_cycles`
+- revisão humana persistida;
+- cache de análise por hash de conteúdo.
 
-- Suporte ao proxy Ollama da disciplina:
-  - `POST /api/chat`
-  - header `X-API-Key`
-- Suporte a servidores OpenAI-compatible:
-  - `POST /chat/completions`
-- Configuração por `.env`.
-- Prompt estruturado para retornar JSON com:
-  - resumo
-  - datas
-  - atividades afetadas
-  - entidades afetadas
-  - obrigações
-  - recomendações
-  - impacto
-  - confiança
+### Robustez operacional
 
-### Análise
+- retry/backoff para fontes e LLM;
+- timeout configurável por fonte;
+- rate limit local para chamadas LLM;
+- `--limit N` no `main.py`;
+- logging em arquivo com `LOG_FILE`.
 
-O `AnalysisAgent` agora é usado pelo pipeline real.
+### Interface Streamlit
 
-Com LLM configurado:
-- chama o modelo configurado em `.env`;
-- normaliza a resposta JSON;
-- preenche `ExtractedInfo`.
+- dashboard ligado a dados persistidos;
+- filtros funcionais por prioridade/regulador/atividade/status/confiança;
+- histórico de ciclos;
+- marcação de revisão persistida;
+- exportação de alertas e relatórios pela interface.
 
-Sem LLM ou em caso de falha:
-- gera resumo local;
-- extrai datas contextuais;
-- extrai obrigações por padrões modais;
-- identifica keywords setoriais;
-- estima impacto;
-- gera recomendações básicas.
+### Exportação e relatórios
 
-### Alertas
+- alertas em `JSON`, `CSV`, `HTML`, `PDF`;
+- relatório consolidado de ciclo em `JSON`, `HTML`, `PDF`.
 
-O `AlertAgent`:
+### Qualidade da análise
 
-- usa o resumo vindo do LLM/fallback;
-- exibe avaliação de impacto;
-- exibe obrigações e recomendações;
-- quebra textos longos sem truncar;
-- calcula prioridade por prazo e impacto;
-- evita transformar prazo vencido em crítico automático;
-- gera IDs únicos com microssegundos;
-- exporta JSON.
-
-### Interface
-
-`app.py` oferece:
-
-- dashboard básico;
-- execução do ciclo;
-- visualização de alertas;
-- filtros visuais;
-- export JSON;
-- marcação de revisão em sessão.
-
-Ainda falta persistência para histórico e revisão humana real.
+- corpus anotado inicial com 30 documentos reais;
+- scripts de geração e avaliação:
+  - `scripts/build_annotated_corpus.py`
+  - `scripts/evaluate_analysis_quality.py`
+- métricas em `src/utils/evaluation.py`:
+  - precisão/recall/F1 de relevância
+  - acurácia de datas
+  - acurácia de obrigações
+  - erro médio de prazo em dias
 
 ### Testes
 
-Suíte atual:
+- suíte com 25 testes (`unittest discover`) cobrindo:
+  - monitoramento BCB/CVM;
+  - análise e fallback;
+  - integração LLM;
+  - alertas e exportações;
+  - persistência e histórico;
+  - métricas de avaliação.
 
-- `tests/test_monitor_agent.py`
-- `tests/test_analysis_agent.py`
-- `tests/test_llm_integration.py`
-- `tests/test_alert_agent.py`
-
-Comando:
-
-```bash
-PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -v
-```
-
-Resultado esperado:
-
-```text
-Ran 13 tests
-OK
-```
-
-## Como Executar
-
-### Teste unitário
+## Comandos principais
 
 ```bash
 PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -v
-```
-
-### Smoke test com LLM
-
-```bash
-PYTHONDONTWRITEBYTECODE=1 python3 -c "from main import RegulatoryMonitoringSystem; system=RegulatoryMonitoringSystem(); system.run_monitoring_cycle(manual_documents=[{'id':'teste','title':'Circular de Teste','source':'BCB','document_type':'Circular','url':'https://example.com','content':'O Banco Central determina que as instituições de pagamento deverão atualizar controles antifraude até 30/06/2026.'}])"
-```
-
-### Pipeline real
-
-```bash
-python3 main.py
-```
-
-### Interface
-
-```bash
+python3 main.py --limit 5
 streamlit run app.py
 ```
 
-## Configuração Atual
+## Próximos focos sugeridos
 
-Exemplo `.env`:
-
-```env
-LLM_PROVIDER=ollama
-LLM_BASE_URL=https://ollama.futurelab.dcc.ufmg.br
-LLM_API_KEY=sua_chave
-LLM_API_KEY_HEADER=X-API-Key
-LLM_MODEL=llama3.2:3b
-LLM_TIMEOUT_SECONDS=60
-LLM_MAX_TOKENS=1200
-LLM_TEMPERATURE=0.1
-
-BCB_NEWS_API_URL=https://www.bcb.gov.br/api/servico/sitebcb/noticias?quantidade=20
-```
-
-## Métricas de Completude
-
-| Área | Status |
-|------|--------|
-| Arquitetura multiagente | 100% |
-| Coleta BCB | 90% |
-| Coleta CVM | 0% |
-| Integração LLM | 90% |
-| Fallback heurístico | 70% |
-| Alertas estruturados | 90% |
-| Interface Streamlit | 70% |
-| Persistência | 0% |
-| Corpus anotado | 0% |
-| Avaliação quantitativa | 0% |
-| Testes unitários | 60% |
-
-## Pendências Principais
-
-1. Persistência SQLite para documentos, extrações, alertas e revisão humana.
-2. Coleta real da CVM.
-3. Interface Streamlit com dados persistidos.
-4. Corpus anotado de 30-50 documentos.
-5. Métricas de avaliação.
-6. Export CSV/HTML/PDF.
-7. Retry, rate limiting e cache de análises.
-
-## Próximo Passo Recomendado
-
-Implementar persistência mínima em SQLite.
-
-Isso destrava:
-
-- histórico de documentos processados;
-- controle real de duplicatas;
-- revisão humana persistente;
-- dashboard com dados reais;
-- base para avaliação e métricas.
+1. Revisão humana completa do corpus anotado seed.
+2. Reexecução da comparação de modelos em janela de estabilidade do endpoint LLM.
+3. Consolidação dos resultados em relatório final da disciplina.

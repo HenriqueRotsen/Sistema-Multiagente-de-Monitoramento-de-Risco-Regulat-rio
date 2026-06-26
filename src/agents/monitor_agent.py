@@ -565,7 +565,9 @@ class MonitorAgent:
         
         regulatory_keywords = [
             "circular", "resolução", "ofício", "comunicado",
-            "instrução", "deliberação", "normativo", "resolução conjunta"
+            "instrução", "deliberação", "normativo", "resolução conjunta",
+            "carta circular", "ofício circular", "consulta pública",
+            "edital", "decisão conjunta"
         ]
         
         for doc in documents:

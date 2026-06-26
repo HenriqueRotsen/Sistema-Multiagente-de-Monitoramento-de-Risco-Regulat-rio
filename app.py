@@ -263,7 +263,7 @@ def render_execution_panel():
     with col1:
         if st.button("🔄 Executar Ciclo de Monitoramento", key="run_cycle"):
             with st.spinner("Executando monitoramento..."):
-                result = st.session_state.system.run_monitoring_cycle()
+                result = st.session_state.system.run_monitoring_cycle(limit=10)
                 st.session_state.alerts = st.session_state.system.get_persisted_alerts()
                 st.session_state.cycle_history = st.session_state.system.get_cycle_history(limit=20)
                 
@@ -276,20 +276,49 @@ def render_execution_panel():
     
     with col2:
         if st.session_state.alerts:
-            json_str = json.dumps(st.session_state.alerts, ensure_ascii=False, indent=2)
-            csv_str = _alerts_to_csv(st.session_state.alerts)
-            st.download_button(
-                label="📊 Download JSON",
-                data=json_str,
-                file_name=f"alertas_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json",
-                mime="application/json"
+            export_format = st.selectbox(
+                "Formato de exportação de alertas",
+                ["json", "csv", "html", "pdf"],
+                index=0,
             )
-            st.download_button(
-                label="📈 Download CSV",
-                data=csv_str,
-                file_name=f"alertas_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv",
-                mime="text/csv"
+            alert_payload = st.session_state.system.export_alerts(
+                st.session_state.alerts,
+                format=export_format,
             )
+            mime_map = {
+                "json": "application/json",
+                "csv": "text/csv",
+                "html": "text/html",
+                "pdf": "application/pdf",
+            }
+            st.download_button(
+                label=f"📥 Download Alertas ({export_format.upper()})",
+                data=alert_payload,
+                file_name=f"alertas_{datetime.now().strftime('%Y%m%d_%H%M%S')}.{export_format}",
+                mime=mime_map.get(export_format, "application/octet-stream"),
+            )
+
+            latest_cycle = st.session_state.cycle_history[0] if st.session_state.cycle_history else None
+            if latest_cycle:
+                cycle_export_format = st.selectbox(
+                    "Formato do relatório consolidado do último ciclo",
+                    ["json", "html", "pdf"],
+                    index=0,
+                )
+                cycle_payload = st.session_state.system.export_cycle_report(
+                    latest_cycle,
+                    format=cycle_export_format,
+                )
+                st.download_button(
+                    label=f"🧾 Download Relatório do Ciclo ({cycle_export_format.upper()})",
+                    data=cycle_payload,
+                    file_name=f"ciclo_{latest_cycle.get('cycle_id','latest')}.{cycle_export_format}",
+                    mime={
+                        "json": "application/json",
+                        "html": "text/html",
+                        "pdf": "application/pdf",
+                    }.get(cycle_export_format, "application/octet-stream"),
+                )
         else:
             st.warning("Nenhum alerta para exportar")
 
