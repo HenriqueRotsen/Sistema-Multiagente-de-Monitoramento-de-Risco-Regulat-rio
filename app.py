@@ -141,11 +141,11 @@ def render_dashboard():
         st.info("Nenhum ciclo executado foi persistido ainda.")
 
 
-def render_alerts_section(min_confidence: float = 0.0):
+def render_alerts_section():
     """Renderiza seção de alertas"""
     st.header("🔔 Alertas Regulatórios")
-    
-    # Filtros
+
+    # --- Filtros ---
     all_activities = sorted(
         {
             activity
@@ -154,47 +154,47 @@ def render_alerts_section(min_confidence: float = 0.0):
         }
     )
 
-    col1, col2, col3, col4 = st.columns(4)
-    
+    col1, col2, col3 = st.columns(3)
     with col1:
         priority_filter = st.multiselect(
-            "Filtrar por Prioridade",
+            "Prioridade (vazio = todas)",
             ["CRÍTICO", "ALTO", "MÉDIO", "BAIXO"],
-            default=["CRÍTICO", "ALTO", "MÉDIO", "BAIXO"]
+            default=[],
         )
-    
     with col2:
         regulator_filter = st.multiselect(
-            "Filtrar por Regulador",
+            "Regulador (vazio = todos)",
             ["BCB", "CVM"],
-            default=["BCB", "CVM"]
+            default=[],
         )
-    
     with col3:
         status_filter = st.selectbox(
             "Status de Revisão",
-            ["Todos", "Pendentes", "Revisados"]
+            ["Todos", "Pendentes", "Revisados"],
         )
 
+    col4, col5 = st.columns([2, 1])
     with col4:
         activity_filter = st.multiselect(
-            "Atividade Afetada",
+            "Atividade Afetada (vazio = todas)",
             all_activities,
-            default=all_activities,
+            default=[],
         )
-    
+    with col5:
+        min_confidence = st.slider("Confiança Mínima", 0.0, 1.0, 0.0, 0.1)
+
     st.divider()
-    
-    # Lista de alertas
+
+    # --- Filtragem ---
     if st.session_state.alerts:
         filtered_alerts = []
         for alert in st.session_state.alerts:
-            priority_ok = alert.get("priority") in priority_filter
-            regulator_ok = alert.get("regulatory_body") in regulator_filter
+            priority_ok = not priority_filter or alert.get("priority") in priority_filter
+            regulator_ok = not regulator_filter or alert.get("regulatory_body") in regulator_filter
             confidence_ok = _confidence_to_score(alert.get("confidence_level")) >= min_confidence
             reviewed = bool(alert.get("human_reviewed"))
             activities = alert.get("affected_activities", [])
-            activity_ok = True if not activity_filter else any(a in activity_filter for a in activities)
+            activity_ok = not activity_filter or any(a in activity_filter for a in activities)
             if status_filter == "Pendentes" and reviewed:
                 continue
             if status_filter == "Revisados" and not reviewed:
@@ -203,57 +203,74 @@ def render_alerts_section(min_confidence: float = 0.0):
                 filtered_alerts.append(alert)
 
         for i, alert in enumerate(filtered_alerts):
+            title = alert.get("document_title", "Sem título")
             with st.expander(
-                f"🔔 {alert['priority']} | {alert['document_title'][:60]}... | "
-                f"{alert['regulatory_body']} | {alert['created_at'][:10]}",
-                expanded=(i == 0)
+                f"🔔 {alert.get('priority', '?')} | {title} | "
+                f"{alert.get('regulatory_body', '')} | {alert.get('created_at', '')[:10]}",
+                expanded=(i == 0),
             ):
                 col1, col2 = st.columns([3, 1])
-                
+
                 with col1:
-                    st.markdown(f"**Regulador:** {alert['regulatory_body']}")
-                    st.markdown(f"**Tipo:** {alert['document_type']}")
-                    st.markdown(f"**Resumo:** {alert['summary']}")
-                    
-                    if alert['affected_activities']:
+                    st.markdown(f"**Regulador:** {alert.get('regulatory_body', '')}")
+                    st.markdown(f"**Tipo:** {alert.get('document_type', '')}")
+
+                    summary = alert.get("summary", "")
+                    if summary:
+                        st.markdown("**Resumo:**")
+                        st.write(summary)
+
+                    activities = alert.get("affected_activities", [])
+                    if activities:
                         st.markdown("**Atividades Afetadas:**")
-                        for activity in alert['affected_activities']:
+                        for activity in activities:
                             st.markdown(f"  • {activity}")
-                    
-                    if alert['obligations']:
+
+                    obligations = alert.get("obligations", [])
+                    if obligations:
                         st.markdown("**Obrigações:**")
-                        for obligation in alert['obligations'][:3]:
-                            st.markdown(f"  • {obligation}")
-                    
-                    if alert['implementation_deadline']:
-                        days = alert['days_until_deadline'] or 0
-                        st.markdown(f"**Prazo:** {alert['implementation_deadline'][:10]} ({days} dias)")
-                    
-                    st.markdown(f"**Confiança:** {alert['confidence_level']}")
-                    st.markdown(f"**[Fonte]({alert['source_url']}) {{target=_blank}}")
-                
+                        for obligation in obligations:
+                            st.write(f"• {obligation}")
+
+                    recommendations = alert.get("recommendations", [])
+                    if recommendations:
+                        st.markdown("**Recomendações:**")
+                        for rec in recommendations:
+                            st.write(f"• {rec}")
+
+                    deadline = alert.get("implementation_deadline")
+                    if deadline:
+                        days = alert.get("days_until_deadline") or 0
+                        st.markdown(f"**Prazo:** {str(deadline)[:10]} ({days} dias)")
+
+                    st.markdown(f"**Confiança:** {alert.get('confidence_level', '')}")
+                    source_url = alert.get("source_url", "")
+                    if source_url:
+                        st.markdown(f"**Fonte:** [{source_url}]({source_url})")
+
                 with col2:
-                    if st.button(f"✅ Revisar", key=f"review_{i}"):
+                    if st.button("✅ Revisar", key=f"review_{i}"):
                         updated = st.session_state.system.mark_alert_reviewed(
-                            alert['alert_id'],
+                            alert["alert_id"],
                             reviewer_notes="Revisado via interface Streamlit",
                         )
                         if updated:
-                            st.session_state.reviewed_alerts[alert['alert_id']] = True
+                            st.session_state.reviewed_alerts[alert["alert_id"]] = True
                             st.session_state.alerts = st.session_state.system.get_persisted_alerts()
                             st.success("Alerta marcado como revisado!")
                             st.rerun()
                         else:
                             st.error("Não foi possível marcar o alerta como revisado.")
-                    
-                    if st.button(f"📌 Arquivar", key=f"archive_{i}"):
-                        archived = st.session_state.system.archive_alert(alert['alert_id'])
+
+                    if st.button("📌 Arquivar", key=f"archive_{i}"):
+                        archived = st.session_state.system.archive_alert(alert["alert_id"])
                         if archived:
                             st.session_state.alerts = st.session_state.system.get_persisted_alerts()
                             st.success("Alerta arquivado com sucesso!")
                             st.rerun()
                         else:
                             st.error("Não foi possível arquivar o alerta.")
+
         if not filtered_alerts:
             st.info("Nenhum alerta corresponde aos filtros selecionados.")
     else:
@@ -381,11 +398,6 @@ def render_sidebar():
             ["Fintechs", "Instituições de Pagamento", "Todas"]
         )
 
-        min_confidence = st.slider(
-            "Confiança Mínima",
-            0.0, 1.0, 0.0, 0.1
-        )
-
         st.subheader("Visualização")
         show_archived = st.checkbox("Mostrar alertas arquivados", value=False)
         if show_archived != st.session_state.get("show_archived", False):
@@ -407,33 +419,29 @@ def render_sidebar():
         - Henrique Rotsen Santos Ferreira
         """)
 
-    return min_confidence
-
-
 def main():
     """Função principal da interface"""
     init_session_state()
-    
-    min_confidence = render_sidebar()
+
+    render_sidebar()
     render_header()
-    
-    # Abas principais
+
     tab1, tab2, tab3, tab4 = st.tabs([
         "📊 Dashboard",
         "🔔 Alertas",
         "⚙️ Controle",
         "📚 Info"
     ])
-    
+
     with tab1:
         render_dashboard()
-    
+
     with tab2:
-        render_alerts_section(min_confidence=min_confidence)
-    
+        render_alerts_section()
+
     with tab3:
         render_execution_panel()
-    
+
     with tab4:
         render_documentation()
 
