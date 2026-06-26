@@ -6,6 +6,7 @@ funções auxiliares e o esqueleto do repositório persistente que será evoluí
 no próximo passo.
 """
 import logging
+import re
 from typing import List, Dict, Any, Optional
 from datetime import datetime
 from html import unescape
@@ -76,33 +77,98 @@ class DataCollector:
         return DataCollector.fetch_bcb_news()
 
     @staticmethod
-    def fetch_bcb_circulares() -> List[Dict[str, Any]]:
-        """
-        Pendente: implementar coleta de atos normativos detalhados do BCB.
-        
-        URL: https://www.bcb.gov.br/content/cns/atos/
-        - Listar circulares por ano
-        - Extrair título, número, data
-        - Link para PDF
-        """
-        return []
+    def fetch_bcb_circulares(timeout: int = 15) -> List[Dict[str, Any]]:
+        """Coleta circulares e atos normativos do BCB via página pública."""
+        url = "https://www.bcb.gov.br/content/cns/atos/"
+        documents: List[Dict[str, Any]] = []
+        try:
+            resp = requests.get(url, timeout=timeout, headers={"User-Agent": "Mozilla/5.0"})
+            resp.raise_for_status()
+            soup = BeautifulSoup(resp.text, "html.parser")
+
+            for link in soup.find_all("a", href=True):
+                href: str = link["href"]
+                title: str = link.get_text(strip=True)
+                if not title or len(title) < 5:
+                    continue
+                # Filtra apenas links de atos (circulares, resoluções, etc.)
+                if not any(k in title.lower() for k in ("circular", "resolução", "portaria", "instrução", "decisão")):
+                    continue
+                full_url = href if href.startswith("http") else f"https://www.bcb.gov.br{href}"
+                # Tenta extrair data de publicação da URL ou do texto
+                date_match = re.search(r"(\d{4})[/-]?(\d{2})[/-]?(\d{2})", href)
+                published = None
+                if date_match:
+                    try:
+                        published = datetime(
+                            int(date_match.group(1)),
+                            int(date_match.group(2)),
+                            int(date_match.group(3)),
+                        ).isoformat()
+                    except ValueError:
+                        published = None
+                documents.append({
+                    "title": title,
+                    "published": published or datetime.now().isoformat(),
+                    "source": "BCB",
+                    "link": full_url,
+                    "type": "Circular",
+                    "summary": title,
+                })
+        except Exception as e:
+            logger.error("Erro ao coletar circulares do BCB: %s", e)
+        return documents
 
     @staticmethod
-    def fetch_cvm_documents() -> List[Dict[str, Any]]:
-        """
-        Pendente: implementar coleta de documentos CVM.
-        
-        CVM oferece múltiplas páginas:
-        - Instruções: https://www.cvm.gov.br/decisoes/instrucoes
-        - Resoluções: https://www.cvm.gov.br/decisoes/resolucoes
-        - Deliberações: https://www.cvm.gov.br/decisoes/deliberacoes
-        
-        Necessário:
-        - Scraping ou API
-        - Normalizar tipos
-        - Extrair metadados (data, número, tema)
-        """
-        return []
+    def fetch_cvm_documents(timeout: int = 15) -> List[Dict[str, Any]]:
+        """Coleta deliberações, instruções e resoluções da CVM via páginas públicas."""
+        sources = [
+            ("https://www.cvm.gov.br/decisoes/resolucoes", "Resolução CVM"),
+            ("https://www.cvm.gov.br/decisoes/instrucoes", "Instrução CVM"),
+            ("https://www.cvm.gov.br/decisoes/deliberacoes", "Deliberação CVM"),
+        ]
+        documents: List[Dict[str, Any]] = []
+        for url, doc_type in sources:
+            try:
+                resp = requests.get(url, timeout=timeout, headers={"User-Agent": "Mozilla/5.0"})
+                resp.raise_for_status()
+                soup = BeautifulSoup(resp.text, "html.parser")
+
+                for row in soup.find_all("tr"):
+                    cells = row.find_all("td")
+                    if len(cells) < 2:
+                        continue
+                    link_tag = cells[0].find("a") or cells[1].find("a")
+                    if not link_tag:
+                        continue
+                    title = link_tag.get_text(strip=True)
+                    href = link_tag.get("href", "")
+                    if not title or len(title) < 5:
+                        continue
+                    full_url = href if href.startswith("http") else f"https://www.cvm.gov.br{href}"
+                    date_cell = cells[-1].get_text(strip=True)
+                    published = None
+                    date_match = re.search(r"(\d{2})/(\d{2})/(\d{4})", date_cell)
+                    if date_match:
+                        try:
+                            published = datetime(
+                                int(date_match.group(3)),
+                                int(date_match.group(2)),
+                                int(date_match.group(1)),
+                            ).isoformat()
+                        except ValueError:
+                            published = None
+                    documents.append({
+                        "title": title,
+                        "published": published or datetime.now().isoformat(),
+                        "source": "CVM",
+                        "link": full_url,
+                        "type": doc_type,
+                        "summary": title,
+                    })
+            except Exception as e:
+                logger.error("Erro ao coletar documentos CVM de %s: %s", url, e)
+        return documents
 
     @staticmethod
     def validate_document(doc: Dict[str, Any]) -> bool:
@@ -159,62 +225,187 @@ class TextProcessor:
 
     @staticmethod
     def extract_sections(text: str) -> Dict[str, str]:
-        """
-        Pendente: implementar extração de seções de documento legal.
-        
-        Documentos regulatórios tem estrutura:
-        - Cabeçalho (regulador, tipo, número)
-        - Preâmbulo (justificativa)
-        - Artigos (obrigações)
-        - Considerandos (motivos)
-        - Vigência (quando entra em vigor)
-        - Assinatura
-        
-        Extrair cada seção para processamento posterior
-        """
-        return {}
+        """Extrai seções estruturais de atos normativos brasileiros."""
+        sections: Dict[str, str] = {}
+        if not text:
+            return sections
+
+        # Padrões de delimitadores de seção (ordem de prioridade)
+        delimiters = [
+            ("cabecalho",        r"(?i)^.*?(?=\bCONSIDERANDO\b|\bArt\.\s*1\b|\bART\.\s*1\b)", re.DOTALL),
+            ("considerandos",    r"(?i)(\bCONSIDERANDO\b.+?)(?=\bArt\.\s*1\b|\bART\.\s*1\b|\bSeção\b|\bCAPÍTULO\b)", re.DOTALL),
+            ("artigos",          r"(?i)((?:Art\.|ART\.)\s*1\b.+?)(?=\bVIG[EÊ]NCIA\b|\bDISPOSIÇÕES FINAIS\b|\Z)", re.DOTALL),
+            ("vigencia",         r"(?i)(?:VIG[EÊ]NCIA|DISPOSIÇÕES FINAIS)(.+?)(?=\Z)", re.DOTALL),
+        ]
+
+        for key, pattern, flags in delimiters:
+            match = re.search(pattern, text, flags)
+            if match:
+                content = (match.group(1) if match.lastindex else match.group(0)).strip()
+                if content:
+                    sections[key] = content
+
+        # Numera artigos individualmente no bloco de artigos
+        if "artigos" in sections:
+            art_matches = re.findall(
+                r"(?:Art\.|ART\.)\s*(\d+)[°º]?\s*[–-]?\s*(.+?)(?=(?:Art\.|ART\.)\s*\d+|\Z)",
+                sections["artigos"],
+                re.DOTALL,
+            )
+            for num, body in art_matches:
+                sections[f"art_{num}"] = body.strip()
+
+        return sections
 
     @staticmethod
     def extract_dates(text: str) -> List[Dict[str, Any]]:
-        """
-        Pendente: implementar extração utilitária de datas e prazos.
-        
-        Padrões a procurar:
-        - "30 de janeiro de 2024"
-        - "31.12.2024"
-        - "até 30 dias após publicação"
-        - "vigência imediata"
-        - "A partir de 01.01.2025"
-        """
-        return []
+        """Extrai datas absolutas e referências relativas a prazos do texto."""
+        results: List[Dict[str, Any]] = []
+        if not text:
+            return results
+
+        _MONTHS = {
+            "janeiro": 1, "fevereiro": 2, "março": 3, "abril": 4,
+            "maio": 5, "junho": 6, "julho": 7, "agosto": 8,
+            "setembro": 9, "outubro": 10, "novembro": 11, "dezembro": 12,
+        }
+
+        # Formato DD/MM/YYYY ou DD.MM.YYYY
+        for m in re.finditer(r"\b(\d{1,2})[/.](\d{1,2})[/.](\d{4})\b", text):
+            try:
+                d, mo, y = int(m.group(1)), int(m.group(2)), int(m.group(3))
+                dt = datetime(y, mo, d)
+                ctx_start = max(0, m.start() - 60)
+                results.append({
+                    "text": m.group(0),
+                    "date": dt.strftime("%Y-%m-%d"),
+                    "context": text[ctx_start:m.end() + 60].strip(),
+                    "type": "absolute",
+                })
+            except ValueError:
+                continue
+
+        # Formato YYYY-MM-DD (ISO)
+        for m in re.finditer(r"\b(\d{4})-(\d{2})-(\d{2})\b", text):
+            try:
+                dt = datetime(int(m.group(1)), int(m.group(2)), int(m.group(3)))
+                ctx_start = max(0, m.start() - 60)
+                results.append({
+                    "text": m.group(0),
+                    "date": dt.strftime("%Y-%m-%d"),
+                    "context": text[ctx_start:m.end() + 60].strip(),
+                    "type": "absolute",
+                })
+            except ValueError:
+                continue
+
+        # Formato extenso: "30 de janeiro de 2024"
+        pattern_extenso = r"\b(\d{1,2})\s+de\s+(" + "|".join(_MONTHS) + r")\s+de\s+(\d{4})\b"
+        for m in re.finditer(pattern_extenso, text, re.IGNORECASE):
+            try:
+                d, mo_str, y = int(m.group(1)), _MONTHS[m.group(2).lower()], int(m.group(3))
+                dt = datetime(y, mo_str, d)
+                ctx_start = max(0, m.start() - 60)
+                results.append({
+                    "text": m.group(0),
+                    "date": dt.strftime("%Y-%m-%d"),
+                    "context": text[ctx_start:m.end() + 60].strip(),
+                    "type": "absolute",
+                })
+            except ValueError:
+                continue
+
+        # Referências relativas
+        relative_patterns = [
+            r"vigência\s+imediata",
+            r"a\s+partir\s+da\s+(?:data\s+de\s+)?publicação",
+            r"\d+\s+dias?\s+(?:úteis?\s+)?após\s+(?:a\s+)?publicação",
+            r"\d+\s+dias?\s+(?:a\s+contar\s+de|contados?\s+(?:a\s+partir\s+)?de)",
+        ]
+        for pat in relative_patterns:
+            for m in re.finditer(pat, text, re.IGNORECASE):
+                ctx_start = max(0, m.start() - 60)
+                results.append({
+                    "text": m.group(0),
+                    "date": None,
+                    "context": text[ctx_start:m.end() + 60].strip(),
+                    "type": "relative",
+                })
+
+        # Remove duplicatas pelo campo "text"
+        seen: set = set()
+        deduped = []
+        for r in results:
+            if r["text"] not in seen:
+                seen.add(r["text"])
+                deduped.append(r)
+
+        return deduped
 
     @staticmethod
     def extract_obligations(text: str) -> List[str]:
-        """
-        Pendente: implementar extração utilitária de obrigações.
-        
-        Procurar por verbos modal + obrigação:
-        - "As instituições deverão..."
-        - "É obrigado a..."
-        - "Fica determinado que..."
-        - "Será aplicada..."
-        
-        Estruturar como lista de obrigações
-        """
-        return []
+        """Extrai sentenças de obrigação usando verbos modais normativos."""
+        if not text:
+            return []
+
+        obligation_patterns = re.compile(
+            r"(?i)\b("
+            r"dever[aã]o?|deve[mr]?|devendo|"
+            r"[eé]\s+obrigat[oó]rio?|[eé]\s+obrigad[oa]|"
+            r"fica(?:m)?\s+(?:determinad[ao]s?|obrigad[ao]s?|vedad[ao]s?|proibid[ao]s?)|"
+            r"ser[aá]\s+(?:obrigat[oó]rio?|exigido)|"
+            r"ter[aã]o?\s+que|precisar[aã]o?|"
+            r"(?:deverá|deverão)\s+manter|"
+            r"[eé]\s+(?:vedado?|proibid[ao])"
+            r")\b"
+        )
+
+        sentences = re.split(r"(?<=[.;])\s+", text)
+        obligations: List[str] = []
+        seen: set = set()
+        for sentence in sentences:
+            sentence = sentence.strip()
+            if obligation_patterns.search(sentence) and len(sentence) > 15:
+                key = sentence[:80].lower()
+                if key not in seen:
+                    seen.add(key)
+                    obligations.append(sentence)
+
+        return obligations
 
     @staticmethod
     def extract_entities(text: str) -> List[str]:
-        """
-        Pendente: implementar NER para identificar entidades.
-        
-        Tipos de entidades:
-        - Instituições financeiras
-        - Reguladores
-        - Tipos de produto/serviço
-        - Jurisdições
-        """
-        return []
+        """Identifica entidades regulatórias e financeiras no texto."""
+        if not text:
+            return []
+
+        known_entities = [
+            # Reguladores
+            "Banco Central", "BCB", "BACEN", "CVM", "SUSEP", "CNSP", "PREVIC",
+            # Categorias de instituições
+            "instituições financeiras", "instituição financeira",
+            "instituição de pagamento", "instituições de pagamento",
+            "banco", "bancos", "cooperativa de crédito", "cooperativas de crédito",
+            "fintech", "fintechs", "adquirente", "adquirentes",
+            "emissor", "emissores", "credenciadora", "credenciadoras",
+            # Produtos e serviços
+            "PIX", "TED", "DOC", "boleto", "cartão de crédito", "cartão de débito",
+            "Open Banking", "Open Finance", "criptoativo", "criptoativos",
+            "câmbio", "crédito", "consórcio",
+            # Outros entes regulados
+            "correspondente bancário", "correspondentes bancários",
+            "Tesouro Nacional", "STN",
+        ]
+
+        text_lower = text.lower()
+        found: List[str] = []
+        seen: set = set()
+        for entity in known_entities:
+            if entity.lower() in text_lower and entity not in seen:
+                seen.add(entity)
+                found.append(entity)
+
+        return found
 
 
 class DocumentRepository:
@@ -240,6 +431,11 @@ class DocumentRepository:
 
         with self._get_connection() as conn:
             conn.executescript(schema_sql)
+            try:
+                conn.execute("ALTER TABLE alerts ADD COLUMN archived INTEGER NOT NULL DEFAULT 0")
+                conn.commit()
+            except sqlite3.OperationalError:
+                pass
 
     def _fallback_schema(self) -> str:
         return """
@@ -530,9 +726,29 @@ class DocumentRepository:
             )
             return cursor.rowcount > 0
 
-    def get_alerts(self, include_reviewed: bool = True) -> List[Dict[str, Any]]:
+    def archive_alert(self, alert_id: str) -> bool:
+        """Marca alerta como arquivado (oculto da lista principal)."""
+        try:
+            with self._get_connection() as conn:
+                conn.execute(
+                    "UPDATE alerts SET archived = 1 WHERE alert_id = ?",
+                    (alert_id,),
+                )
+            return True
+        except Exception as e:
+            logger.error("Erro ao arquivar alerta %s: %s", alert_id, e)
+            return False
+
+    def get_alerts(
+        self, include_reviewed: bool = True, include_archived: bool = False
+    ) -> List[Dict[str, Any]]:
         """Retorna alertas persistidos ordenados por data."""
-        where_clause = "" if include_reviewed else "WHERE human_reviewed = 0"
+        conditions = []
+        if not include_reviewed:
+            conditions.append("human_reviewed = 0")
+        if not include_archived:
+            conditions.append("archived = 0")
+        where_clause = ("WHERE " + " AND ".join(conditions)) if conditions else ""
         query = f"""
             SELECT alert_json
             FROM alerts
