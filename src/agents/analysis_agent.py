@@ -111,7 +111,12 @@ class AnalysisAgent:
         Sumarização simples para fallback sem LLM.
         """
         clean_text = " ".join(text.split())
-        info.summary = clean_text[:500] + ("..." if len(clean_text) > 500 else "")
+        # Encerra no limite de frase mais próximo até 2000 chars; sem truncação artificial
+        if len(clean_text) <= 2000:
+            info.summary = clean_text
+        else:
+            cut = clean_text[:2000].rfind(". ")
+            info.summary = clean_text[: cut + 1] if cut != -1 else clean_text[:2000]
         info.confidence_scores['summary'] = 0.45 if info.summary else 0.0
 
     def _extract_dates(self, text: str, info: ExtractedInfo, metadata: Dict[str, Any]):
