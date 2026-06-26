@@ -85,6 +85,43 @@ class TestDocumentRepository(unittest.TestCase):
         reviewed_alerts = self.repo.get_alerts()
         self.assertTrue(reviewed_alerts[0]["human_reviewed"])
 
+    def test_archive_alert(self):
+        alert = {
+            "alert_id": "ALR-ARCH",
+            "created_at": datetime.now().isoformat(),
+            "priority": "MÉDIO",
+            "human_reviewed": False,
+            "document_title": "Teste de arquivamento",
+            "regulatory_body": "CVM",
+            "summary": "Alerta para arquivar",
+            "source_url": "https://example.com/arch",
+            "document_type": "Instrução",
+            "affected_activities": [],
+            "obligations": [],
+            "confidence_level": "BAIXA",
+            "impact_assessment": "",
+            "recommendations": [],
+            "days_until_deadline": None,
+            "effective_date": None,
+            "implementation_deadline": None,
+        }
+        self.repo.save_alert(None, alert)
+
+        # Alerta visível antes de arquivar
+        before = self.repo.get_alerts(include_archived=False)
+        self.assertEqual(len(before), 1)
+
+        # Arquiva o alerta
+        self.assertTrue(self.repo.archive_alert("ALR-ARCH"))
+
+        # Não aparece mais na lista principal
+        after = self.repo.get_alerts(include_archived=False)
+        self.assertEqual(len(after), 0)
+
+        # Aparece quando include_archived=True
+        all_alerts = self.repo.get_alerts(include_archived=True)
+        self.assertEqual(len(all_alerts), 1)
+
     def test_monitoring_cycle_history(self):
         cycle = {
             "cycle_id": "cycle-001",

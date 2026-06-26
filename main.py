@@ -300,9 +300,20 @@ class RegulatoryMonitoringSystem:
             logger.info(f"Alerta {alert_id} marcado como revisado")
         return updated
 
-    def get_persisted_alerts(self, include_reviewed: bool = True) -> List[Dict[str, Any]]:
+    def archive_alert(self, alert_id: str) -> bool:
+        """Arquiva alerta, removendo-o da lista principal de revisão."""
+        archived = self.repository.archive_alert(alert_id)
+        if archived:
+            logger.info(f"Alerta {alert_id} arquivado")
+        return archived
+
+    def get_persisted_alerts(
+        self, include_reviewed: bool = True, include_archived: bool = False
+    ) -> List[Dict[str, Any]]:
         """Retorna alertas já persistidos no banco."""
-        return self.repository.get_alerts(include_reviewed=include_reviewed)
+        return self.repository.get_alerts(
+            include_reviewed=include_reviewed, include_archived=include_archived
+        )
 
     def get_cycle_history(self, limit: int = 20) -> List[Dict[str, Any]]:
         """Retorna histórico de ciclos persistidos."""

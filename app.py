@@ -247,7 +247,13 @@ def render_alerts_section(min_confidence: float = 0.0):
                             st.error("Não foi possível marcar o alerta como revisado.")
                     
                     if st.button(f"📌 Arquivar", key=f"archive_{i}"):
-                        st.info("Alerta arquivado")
+                        archived = st.session_state.system.archive_alert(alert['alert_id'])
+                        if archived:
+                            st.session_state.alerts = st.session_state.system.get_persisted_alerts()
+                            st.success("Alerta arquivado com sucesso!")
+                            st.rerun()
+                        else:
+                            st.error("Não foi possível arquivar o alerta.")
         if not filtered_alerts:
             st.info("Nenhum alerta corresponde aos filtros selecionados.")
     else:
@@ -364,24 +370,32 @@ def render_sidebar():
     """Renderiza sidebar"""
     with st.sidebar:
         st.title("🔧 Configurações")
-        
+
         st.subheader("Fontes")
         bcb_enabled = st.checkbox("BCB", value=True)
         cvm_enabled = st.checkbox("CVM", value=True)
-        
+
         st.subheader("Filtros de Relevância")
         sector = st.selectbox(
             "Setor Monitorado",
             ["Fintechs", "Instituições de Pagamento", "Todas"]
         )
-        
+
         min_confidence = st.slider(
             "Confiança Mínima",
             0.0, 1.0, 0.6, 0.1
         )
-        
+
+        st.subheader("Visualização")
+        show_archived = st.checkbox("Mostrar alertas arquivados", value=False)
+        if show_archived != st.session_state.get("show_archived", False):
+            st.session_state["show_archived"] = show_archived
+            st.session_state.alerts = st.session_state.system.get_persisted_alerts(
+                include_archived=show_archived
+            )
+
         st.divider()
-        
+
         st.subheader("Sobre")
         st.markdown("""
         **Disciplina:** Projeto de Agentes de IA
