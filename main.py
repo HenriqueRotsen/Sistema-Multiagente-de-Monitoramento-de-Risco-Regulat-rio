@@ -2,21 +2,26 @@
 Main orchestrator - Coordena os 3 agentes do sistema
 """
 from dataclasses import asdict
+import argparse
+import hashlib
 import logging
+import os
+from pathlib import Path
 from typing import List, Dict, Any
 from datetime import datetime
+from uuid import uuid4
 
 from src.agents.monitor_agent import MonitorAgent
 from src.agents.analysis_agent import AnalysisAgent
 from src.agents.alert_agent import AlertAgent, StructuredAlert
 from src.utils.llm_integration import RegulatoryLLM
+from src.utils.data_collection import DocumentRepository
 
 try:
     from dotenv import load_dotenv
 except ImportError:  # pragma: no cover
     load_dotenv = None
 
-logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 
@@ -34,6 +39,7 @@ class RegulatoryMonitoringSystem:
     def __init__(self):
         if load_dotenv:
             load_dotenv()
+        self._configure_logging()
 
         llm_model = RegulatoryLLM.from_env()
         if llm_model:
@@ -41,12 +47,38 @@ class RegulatoryMonitoringSystem:
         else:
             logger.info("LLM não configurado; análise usará fallback heurístico")
 
-        self.monitor_agent = MonitorAgent()
+        db_path = os.getenv("DB_PATH", "regulatory_monitor.db")
+        self.repository = DocumentRepository(db_path=db_path)
+        self.monitor_agent = MonitorAgent(db_path=db_path)
         self.analysis_agent = AnalysisAgent(llm_model=llm_model)
         self.alert_agent = AlertAgent()
         self.system_status = "initialized"
 
-    def run_monitoring_cycle(self, manual_documents: List[Dict[str, Any]] = None) -> Dict[str, Any]:
+    def _configure_logging(self):
+        """Configura log no console e opcionalmente em arquivo."""
+        if logging.getLogger().handlers:
+            return
+
+        handlers: List[logging.Handler] = [logging.StreamHandler()]
+        log_file = (os.getenv("LOG_FILE", "") or "").strip()
+        if log_file:
+            log_path = Path(log_file)
+            log_path.parent.mkdir(parents=True, exist_ok=True)
+            handlers.append(logging.FileHandler(log_path, encoding="utf-8"))
+
+        log_level_name = (os.getenv("LOG_LEVEL", "INFO") or "INFO").upper()
+        log_level = getattr(logging, log_level_name, logging.INFO)
+        logging.basicConfig(
+            level=log_level,
+            format="%(asctime)s %(levelname)s [%(name)s] %(message)s",
+            handlers=handlers,
+        )
+
+    def run_monitoring_cycle(
+        self,
+        manual_documents: List[Dict[str, Any]] = None,
+        limit: int = None,
+    ) -> Dict[str, Any]:
         """
         Executa um ciclo completo de monitoramento
         
@@ -61,6 +93,8 @@ class RegulatoryMonitoringSystem:
         logger.info("=" * 80)
         
         cycle_result = {
+            "cycle_id": f"cycle-{uuid4().hex[:12]}",
+            "started_at": datetime.now().isoformat(),
             "timestamp": datetime.now().isoformat(),
             "documents_collected": 0,
             "documents_analyzed": 0,
@@ -72,7 +106,7 @@ class RegulatoryMonitoringSystem:
         try:
             # ETAPA 1: COLETA
             logger.info("\n[ETAPA 1] Coletando documentos...")
-            documents = self._collect_documents(manual_documents)
+            documents = self._collect_documents(manual_documents, limit=limit)
             cycle_result["documents_collected"] = len(documents)
             logger.info(f"✓ {len(documents)} documentos coletados")
             
@@ -104,10 +138,16 @@ class RegulatoryMonitoringSystem:
         logger.info("\n" + "=" * 80)
         logger.info("CICLO DE MONITORAMENTO FINALIZADO")
         logger.info("=" * 80)
+        cycle_result["finished_at"] = datetime.now().isoformat()
+        self.repository.save_monitoring_cycle(cycle_result)
         
         return cycle_result
 
-    def _collect_documents(self, manual_documents: List[Dict[str, Any]] = None) -> List[Dict[str, Any]]:
+    def _collect_documents(
+        self,
+        manual_documents: List[Dict[str, Any]] = None,
+        limit: int = None,
+    ) -> List[Dict[str, Any]]:
         """
         Etapa 1: Coleta de documentos
         
@@ -115,13 +155,17 @@ class RegulatoryMonitoringSystem:
         """
         if manual_documents:
             logger.info("Usando documentos manuais para teste")
+            if limit is not None:
+                manual_documents = manual_documents[: max(0, limit)]
+            for doc in manual_documents:
+                self.repository.add_document(doc)
             return manual_documents
         
         collected = self.monitor_agent.monitor_sources()
         unique_documents = self.monitor_agent.eliminate_duplicates(collected)
         screened_documents = self.monitor_agent.initial_screening(unique_documents)
 
-        return [
+        documents_as_dict = [
             {
                 "id": doc.id,
                 "title": doc.title,
@@ -134,6 +178,12 @@ class RegulatoryMonitoringSystem:
             }
             for doc in screened_documents
         ]
+        if limit is not None:
+            documents_as_dict = documents_as_dict[: max(0, limit)]
+
+        for doc in documents_as_dict:
+            self.repository.add_document(doc)
+        return documents_as_dict
 
     def _analyze_documents(self, documents: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
         """Etapa 2: Análise de impacto regulatório"""
@@ -150,16 +200,39 @@ class RegulatoryMonitoringSystem:
                 "url": doc.get("url", ""),
                 "published_date": doc.get("published_date"),
             }
-            extracted_info = self.analysis_agent.analyze_document(doc.get("content", ""), metadata)
-            analysis = asdict(extracted_info)
+            content_text = doc.get("content", "")
+            content_hash = hashlib.sha256(content_text.encode("utf-8")).hexdigest()
+            cached_analysis = self.repository.get_cached_extraction_by_content_hash(content_hash)
+
+            if cached_analysis:
+                analysis = dict(cached_analysis)
+                analysis["document_id"] = metadata["id"]
+                analysis["title"] = metadata["title"]
+                analysis["regulatory_body"] = metadata["source"]
+                analysis["document_type"] = metadata["document_type"]
+                logger.info("    ↳ análise reutilizada do cache por hash")
+            else:
+                extracted_info = self.analysis_agent.analyze_document(content_text, metadata)
+                analysis = asdict(extracted_info)
+
             analysis["source_url"] = doc.get("url", "")
             analyses.append(analysis)
+            document_id = analysis.get("document_id")
+            if document_id:
+                self.repository.save_extraction(document_id, analysis)
+                self.repository.update_processing_status(document_id, "processed")
+                self.monitor_agent.update_processed(document_id)
         
         return analyses
 
     def _generate_alerts(self, analyses: List[Dict[str, Any]]) -> List[StructuredAlert]:
         """Etapa 3: Geração de alertas"""
         alerts = self.alert_agent.batch_generate_alerts(analyses)
+        document_map = {(a.get("title"), a.get("source_url")): a.get("document_id") for a in analyses}
+        for alert in alerts:
+            payload = alert.to_dict()
+            document_id = document_map.get((alert.document_title, alert.source_url))
+            self.repository.save_alert(document_id=document_id, alert=payload)
         return self.alert_agent.prioritize_alerts(alerts)
 
     def _get_test_documents(self) -> List[Dict[str, Any]]:
@@ -194,28 +267,47 @@ class RegulatoryMonitoringSystem:
 
     def get_system_status(self) -> Dict[str, Any]:
         """Retorna status atual do sistema"""
+        doc_stats = self.repository.get_statistics()
+        alert_stats = self.repository.get_alert_statistics()
         return {
             "status": self.system_status,
-            "monitor": self.monitor_agent.get_status(),
-            "alerts_generated": self.alert_agent.get_alert_summary(),
+            "monitor": {**self.monitor_agent.get_status(), **doc_stats},
+            "alerts_generated": alert_stats,
             "timestamp": datetime.now().isoformat()
         }
 
     def mark_alert_reviewed(self, alert_id: str, reviewer_notes: str = "") -> bool:
         """Marca alerta como revisado por humano"""
-        # TODO: Implementar atualização em banco de dados
-        logger.info(f"Alerta {alert_id} marcado como revisado")
-        return True
+        updated = self.repository.mark_alert_reviewed(alert_id, reviewer_notes)
+        if updated:
+            logger.info(f"Alerta {alert_id} marcado como revisado")
+        return updated
+
+    def get_persisted_alerts(self, include_reviewed: bool = True) -> List[Dict[str, Any]]:
+        """Retorna alertas já persistidos no banco."""
+        return self.repository.get_alerts(include_reviewed=include_reviewed)
+
+    def get_cycle_history(self, limit: int = 20) -> List[Dict[str, Any]]:
+        """Retorna histórico de ciclos persistidos."""
+        return self.repository.get_monitoring_cycles(limit=limit)
 
 
 def main():
     """Função principal para teste"""
+    parser = argparse.ArgumentParser(description="Sistema de monitoramento regulatório")
+    parser.add_argument(
+        "--limit",
+        type=int,
+        default=None,
+        help="Limita a quantidade de documentos coletados/analisados no ciclo.",
+    )
+    args = parser.parse_args()
     
     # Cria sistema
     system = RegulatoryMonitoringSystem()
     
     # Executa ciclo de monitoramento
-    result = system.run_monitoring_cycle()
+    result = system.run_monitoring_cycle(limit=args.limit)
     
     # Exibe resumo
     print("\n\n" + "=" * 80)

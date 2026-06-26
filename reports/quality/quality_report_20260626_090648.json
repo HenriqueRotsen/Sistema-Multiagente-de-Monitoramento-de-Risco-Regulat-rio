@@ -1,0 +1,26 @@
+{
+  "generated_at": "2026-06-26T09:06:48.779597",
+  "corpus_path": "/home/rotsen/Área de Trabalho/1_Semestre_Doutorado/Agentes De IA/TP/data/corpus/annotated_corpus.jsonl",
+  "sample_size": 30,
+  "results": {
+    "heuristic": {
+      "sample_size": 30,
+      "relevance": {
+        "precision": 1.0,
+        "recall": 1.0,
+        "f1": 1.0
+      },
+      "date_accuracy": {
+        "effective_date": 0.0,
+        "implementation_deadline": 0.0,
+        "overall": 0.0
+      },
+      "obligations": {
+        "precision": 1.0,
+        "recall": 1.0,
+        "f1": 1.0
+      },
+      "deadline_error_days_mean": null
+    }
+  }
+}

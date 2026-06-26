@@ -12,6 +12,7 @@ import json
 import logging
 import os
 import re
+import time
 from typing import Any, Dict, Optional
 
 import requests
@@ -30,6 +31,9 @@ class RegulatoryLLMConfig:
     timeout_seconds: int = 60
     temperature: float = 0.1
     max_tokens: int = 1200
+    max_retries: int = 2
+    retry_backoff_seconds: float = 1.0
+    rate_limit_per_minute: int = 20
 
     @classmethod
     def from_env(cls) -> Optional["RegulatoryLLMConfig"]:
@@ -57,6 +61,9 @@ class RegulatoryLLMConfig:
             timeout_seconds=int(os.getenv("LLM_TIMEOUT_SECONDS", "60")),
             temperature=float(os.getenv("LLM_TEMPERATURE", "0.1")),
             max_tokens=int(os.getenv("LLM_MAX_TOKENS", "1200")),
+            max_retries=int(os.getenv("LLM_MAX_RETRIES", "2")),
+            retry_backoff_seconds=float(os.getenv("LLM_RETRY_BACKOFF_SECONDS", "1.0")),
+            rate_limit_per_minute=int(os.getenv("LLM_RATE_LIMIT_PER_MINUTE", "20")),
         )
 
 
@@ -65,6 +72,7 @@ class RegulatoryLLM:
 
     def __init__(self, config: RegulatoryLLMConfig):
         self.config = config
+        self._last_request_ts: Optional[float] = None
 
     @classmethod
     def from_env(cls) -> Optional["RegulatoryLLM"]:
@@ -118,14 +126,7 @@ class RegulatoryLLM:
             ],
         }
 
-        response = requests.post(
-            url,
-            headers=headers,
-            json=payload,
-            timeout=self.config.timeout_seconds,
-        )
-        response.raise_for_status()
-        data = response.json()
+        data = self._post_json_with_retry(url, headers, payload, provider_name="ollama")
         if "error" in data:
             raise RuntimeError(f"Ollama erro: {data['error']}")
         return data["message"]["content"]
@@ -152,15 +153,57 @@ class RegulatoryLLM:
             ],
         }
 
-        response = requests.post(
-            url,
-            headers=headers,
-            json=payload,
-            timeout=self.config.timeout_seconds,
-        )
-        response.raise_for_status()
-        data = response.json()
+        data = self._post_json_with_retry(url, headers, payload, provider_name="openai")
         return data["choices"][0]["message"]["content"]
+
+    def _post_json_with_retry(
+        self,
+        url: str,
+        headers: Dict[str, str],
+        payload: Dict[str, Any],
+        provider_name: str,
+    ) -> Dict[str, Any]:
+        retries = max(0, self.config.max_retries)
+        last_exception: Optional[Exception] = None
+
+        for attempt in range(retries + 1):
+            self._wait_for_rate_limit_slot()
+            try:
+                response = requests.post(
+                    url,
+                    headers=headers,
+                    json=payload,
+                    timeout=self.config.timeout_seconds,
+                )
+                response.raise_for_status()
+                return response.json()
+            except (requests.RequestException, ValueError) as exc:
+                last_exception = exc
+                if attempt >= retries:
+                    break
+                backoff = self.config.retry_backoff_seconds * (2 ** attempt)
+                logger.warning(
+                    "Falha em chamada %s (tentativa %s/%s). Retry em %.1fs: %s",
+                    provider_name,
+                    attempt + 1,
+                    retries + 1,
+                    backoff,
+                    str(exc),
+                )
+                time.sleep(backoff)
+
+        raise RuntimeError(f"Falha ao chamar provedor {provider_name}: {last_exception}")
+
+    def _wait_for_rate_limit_slot(self):
+        """Rate limiting simples por intervalo mínimo entre chamadas."""
+        rpm = max(1, self.config.rate_limit_per_minute)
+        min_interval_seconds = 60.0 / float(rpm)
+        now = time.monotonic()
+        if self._last_request_ts is not None:
+            elapsed = now - self._last_request_ts
+            if elapsed < min_interval_seconds:
+                time.sleep(min_interval_seconds - elapsed)
+        self._last_request_ts = time.monotonic()
 
     def _build_prompt(self, text: str, metadata: Dict[str, Any], sector_profile: Dict[str, Any]) -> str:
         clipped_text = text[:12000]

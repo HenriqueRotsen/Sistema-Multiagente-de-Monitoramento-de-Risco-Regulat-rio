@@ -13,8 +13,8 @@ Sistema de IA para monitoramento automatizado de mudanças regulatórias no seto
 - [x] Alertas estruturados com resumo, impacto, obrigações, recomendações e rastreabilidade
 - [x] Interface Streamlit básica
 - [x] Testes unitários para coleta, análise, LLM e alertas
-- [ ] Coleta CVM real
-- [ ] Banco de dados persistente
+- [x] Coleta CVM real
+- [x] Banco de dados persistente (SQLite mínimo)
 - [ ] Corpus anotado e métricas de avaliação
 
 ## Estrutura do Projeto
@@ -119,6 +119,28 @@ Rode os testes:
 PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -v
 ```
 
+## Avaliação de Qualidade da Análise
+
+Gerar corpus anotado inicial (30 documentos reais):
+
+```bash
+CVM_MAX_PAGES=4 PYTHONDONTWRITEBYTECODE=1 python3 scripts/build_annotated_corpus.py --size 30 --output data/corpus/annotated_corpus.jsonl
+```
+
+Rodar baseline heurístico:
+
+```bash
+PYTHONDONTWRITEBYTECODE=1 python3 scripts/evaluate_analysis_quality.py --corpus data/corpus/annotated_corpus.jsonl --heuristic-only
+```
+
+Comparar modelos (quando LLM estiver configurado no `.env`):
+
+```bash
+PYTHONDONTWRITEBYTECODE=1 python3 scripts/evaluate_analysis_quality.py --corpus data/corpus/annotated_corpus.jsonl --models llama3.2:3b,deepseek-r1:8b
+```
+
+Relatórios são salvos em `reports/quality/`.
+
 ## Teste Rápido do LLM
 
 ```bash
@@ -153,7 +175,7 @@ Temas monitorados:
 ## Próximos Passos
 
 1. Implementar coleta real da CVM.
-2. Criar persistência em banco de dados para documentos, análises e alertas.
+2. Evoluir persistência em banco de dados (consultas, migrações e escala).
 3. Criar corpus anotado com 30-50 documentos.
 4. Calcular precisão, recall, F1 e acurácia de campos extraídos.
 5. Melhorar filtros e histórico na interface Streamlit.

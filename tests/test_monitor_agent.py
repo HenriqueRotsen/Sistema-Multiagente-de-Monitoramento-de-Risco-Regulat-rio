@@ -5,6 +5,7 @@ import unittest
 from src.agents.monitor_agent import MonitorAgent, RegulatoryDocument
 from datetime import datetime
 from unittest.mock import patch
+from urllib.error import URLError
 
 
 class TestMonitorAgent(unittest.TestCase):
@@ -125,6 +126,37 @@ class TestMonitorAgent(unittest.TestCase):
         self.assertEqual(docs[0].document_type, "Resolução")
         self.assertEqual(docs[0].published_date.year, 2025)
         self.assertEqual(docs[0].url, "https://www.bcb.gov.br/detalhenoticia/20548/noticia")
+
+    @patch.object(MonitorAgent, "_parse_cvm_legislation_page")
+    def test_fetch_cvm_documents_from_legislation(self, mock_parse):
+        """Testa coleta CVM com filtro de tipos regulatórios."""
+        mock_parse.return_value = (
+            [
+                {
+                    "title": "Resolução CVM 244",
+                    "summary": "Altera norma anterior para emissores.",
+                    "document_type": "Resoluções",
+                    "published": "29/05/2026",
+                    "link": "https://conteudo.cvm.gov.br/legislacao/resolucoes/resol244.html",
+                },
+                {
+                    "title": "Portaria CVM/PTE Nº 139/2026",
+                    "summary": "Ato administrativo interno.",
+                    "document_type": "Portarias",
+                    "published": "12/06/2026",
+                    "link": "https://conteudo.cvm.gov.br/legislacao/portarias/pte139.html",
+                },
+            ],
+            None,
+        )
+
+        docs = self.monitor._fetch_cvm_documents("https://conteudo.cvm.gov.br/legislacao/index.html")
+
+        self.assertEqual(len(docs), 1)
+        self.assertEqual(docs[0].source, "CVM")
+        self.assertEqual(docs[0].document_type, "Resolução")
+        self.assertEqual(docs[0].published_date.year, 2026)
+        self.assertIn("resol244", docs[0].url)
     
     def test_get_status(self):
         """Testa obtenção de status do monitor"""
@@ -132,6 +164,18 @@ class TestMonitorAgent(unittest.TestCase):
         self.assertIn("total_processed", status)
         self.assertIn("sources", status)
         self.assertIn("last_update", status)
+
+    @patch("src.agents.monitor_agent.time.sleep")
+    @patch("src.agents.monitor_agent.urlopen")
+    def test_open_url_with_retry(self, mock_urlopen, _mock_sleep):
+        """Testa retry com backoff para coleta de fontes."""
+        mock_response = object()
+        mock_urlopen.side_effect = [URLError("temp"), mock_response]
+
+        result = self.monitor._open_url_with_retry("https://example.com", timeout=5)
+
+        self.assertIs(result, mock_response)
+        self.assertEqual(mock_urlopen.call_count, 2)
 
 
 if __name__ == '__main__':

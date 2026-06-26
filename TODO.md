@@ -65,67 +65,67 @@ Este checklist reflete o estado atual do projeto após a coleta real do BCB e a 
 ## Pendente
 
 ### 1. Coleta CVM
-- [ ] Implementar `_fetch_cvm_documents()`
-  - [ ] Escolher fonte oficial estável da CVM
-  - [ ] Coletar resoluções, deliberações, instruções, ofícios e comunicados
-  - [ ] Normalizar metadados para `RegulatoryDocument`
-  - [ ] Tratar paginação
-  - [ ] Criar testes com mocks
+- [x] Implementar `_fetch_cvm_documents()`
+  - [x] Escolher fonte oficial estável da CVM
+  - [x] Coletar resoluções, deliberações, instruções, ofícios e comunicados
+  - [x] Normalizar metadados para `RegulatoryDocument`
+  - [x] Tratar paginação
+  - [x] Criar testes com mocks
 
 ### 2. Persistência
-- [ ] Criar `database/schema.sql`
-- [ ] Implementar `DocumentRepository`
-  - [ ] `add_document()`
-  - [ ] `check_duplicate()`
-  - [ ] `get_processed_documents()`
-  - [ ] `update_processing_status()`
-  - [ ] `get_statistics()`
-- [ ] Salvar documentos coletados
-- [ ] Salvar extrações do LLM/fallback
-- [ ] Salvar alertas e status de revisão humana
+- [x] Criar `database/schema.sql`
+- [x] Implementar `DocumentRepository`
+  - [x] `add_document()`
+  - [x] `check_duplicate()`
+  - [x] `get_processed_documents()`
+  - [x] `update_processing_status()`
+  - [x] `get_statistics()`
+- [x] Salvar documentos coletados
+- [x] Salvar extrações do LLM/fallback
+- [x] Salvar alertas e status de revisão humana
 
 ### 3. Interface Streamlit
-- [ ] Conectar dashboard a dados persistidos
-- [ ] Exibir resumo, impacto e recomendações do LLM nos cards de alerta
-- [ ] Implementar filtros funcionais por:
-  - [ ] regulador
-  - [ ] prioridade
-  - [ ] atividade afetada
-  - [ ] status de revisão
-- [ ] Persistir marcação de alerta revisado
-- [ ] Mostrar histórico de ciclos
-- [ ] Exportar CSV além de JSON
+- [x] Conectar dashboard a dados persistidos
+- [x] Exibir resumo, impacto e recomendações do LLM nos cards de alerta
+- [x] Implementar filtros funcionais por:
+  - [x] regulador
+  - [x] prioridade
+  - [x] atividade afetada
+  - [x] status de revisão
+- [x] Persistir marcação de alerta revisado
+- [x] Mostrar histórico de ciclos
+- [x] Exportar CSV além de JSON
 
 ### 4. Qualidade da Análise
-- [ ] Criar corpus anotado com 30-50 documentos reais
-- [ ] Anotar manualmente:
-  - [ ] relevância
-  - [ ] datas de vigência
-  - [ ] prazos
-  - [ ] obrigações
-  - [ ] atividades afetadas
-  - [ ] impacto
-- [ ] Calcular métricas:
-  - [ ] precisão, recall e F1 para relevância
-  - [ ] acurácia de datas
-  - [ ] acurácia de obrigações
-  - [ ] erro médio de prazo em dias
-- [ ] Comparar modelos:
-  - [ ] `llama3.2:3b`
-  - [ ] `deepseek-r1:8b`
-  - [ ] outro modelo disponível, se útil
+- [x] Criar corpus anotado com 30-50 documentos reais
+- [x] Anotar campos de referência (seed inicial para revisão humana):
+  - [x] relevância
+  - [x] datas de vigência
+  - [x] prazos
+  - [x] obrigações
+  - [x] atividades afetadas
+  - [x] impacto
+- [x] Calcular métricas:
+  - [x] precisão, recall e F1 para relevância
+  - [x] acurácia de datas
+  - [x] acurácia de obrigações
+  - [x] erro médio de prazo em dias
+- [x] Comparar modelos:
+  - [x] `llama3.2:3b`
+  - [x] `deepseek-r1:8b`
+  - [x] outro modelo disponível, se útil
 
 ### 5. Robustez Operacional
-- [ ] Retry com backoff para BCB, CVM e LLM
-- [ ] Timeout configurável por fonte
-- [ ] Rate limiting para chamadas LLM
-- [ ] Cache de análises por hash de conteúdo
-- [ ] Logging em arquivo via `LOG_FILE`
-- [ ] Modo `--limit N` para testar poucos documentos reais
+- [x] Retry com backoff para BCB, CVM e LLM
+- [x] Timeout configurável por fonte
+- [x] Rate limiting para chamadas LLM
+- [x] Cache de análises por hash de conteúdo
+- [x] Logging em arquivo via `LOG_FILE`
+- [x] Modo `--limit N` para testar poucos documentos reais
 
 ### 6. Exportação e Relatórios
 - [x] JSON
-- [ ] CSV
+- [x] CSV
 - [ ] HTML
 - [ ] PDF
 - [ ] Relatório consolidado por ciclo
