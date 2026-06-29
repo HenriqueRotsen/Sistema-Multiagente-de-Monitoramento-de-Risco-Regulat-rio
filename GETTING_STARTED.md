@@ -31,7 +31,11 @@ LLM_TIMEOUT_SECONDS=60
 LLM_MAX_TOKENS=1200
 LLM_TEMPERATURE=0.1
 
-BCB_NEWS_API_URL=https://www.bcb.gov.br/api/servico/sitebcb/noticias?quantidade=20
+BCB_NEWS_API_URL=
+BCB_HISTORY_LIMIT=200
+CVM_MAX_PAGES=20
+MONITOR_INTERVAL_SECONDS=3600
+DASHBOARD_REFRESH_SECONDS=60
 ```
 
 Para análises mais fortes, teste:
@@ -72,6 +76,12 @@ O sistema irá:
 
 Observação: o ciclo real pode chamar o LLM várias vezes. Para testes rápidos, prefira o comando manual da seção anterior.
 
+Para manter o monitoramento ativo e executar um novo ciclo a cada hora:
+
+```bash
+python3 main.py --watch
+```
+
 ## 5. Interface Streamlit
 
 ```bash
@@ -88,8 +98,20 @@ Status atual da interface:
 - revisão humana persistida
 - exportação de alertas em JSON/CSV/HTML/PDF
 - exportação de relatório consolidado do ciclo (JSON/HTML/PDF)
+- atualização automática dos dados persistidos a cada 60 segundos
 
-## 6. Testes Automatizados
+## 6. Executar com Docker
+
+O Compose inicia o worker contínuo e a interface usando a mesma imagem:
+
+```bash
+docker compose up --build -d
+```
+
+Abra `http://localhost:8501`. O banco fica no volume `regulatory-data` e não é
+removido por `docker compose down`.
+
+## 7. Testes Automatizados
 
 ```bash
 PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -v
@@ -98,7 +120,7 @@ PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -v
 Resultado esperado:
 
 ```text
-Ran 25 tests
+Ran 53 tests
 OK
 ```
 
@@ -114,7 +136,7 @@ Os testes cobrem:
 - persistência SQLite e histórico de ciclos
 - métricas de avaliação de qualidade
 
-## 7. Configurações de LLM Suportadas
+## 8. Configurações de LLM Suportadas
 
 ### Proxy Ollama da disciplina
 

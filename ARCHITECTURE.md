@@ -65,8 +65,9 @@ Responsabilidades:
 Configurações relevantes:
 
 - `BCB_NEWS_API_URL`
+- `BCB_HISTORY_LIMIT` (padrão: `200`)
 - `CVM_LEGISLATION_URL`
-- `CVM_MAX_PAGES`
+- `CVM_MAX_PAGES` (padrão: `20`)
 - `BCB_TIMEOUT_SECONDS`
 - `CVM_TIMEOUT_SECONDS`
 - `SOURCE_RETRY_ATTEMPTS`
@@ -161,6 +162,8 @@ Pipeline por ciclo:
 Extras:
 
 - suporte a `--limit N` para ciclos menores;
+- worker contínuo com `--watch` e intervalo configurável por CLI ou
+  `MONITOR_INTERVAL_SECONDS`;
 - logging em console e opcional em arquivo (`LOG_FILE`).
 
 ### 7. Interface Streamlit
@@ -178,6 +181,13 @@ Funcionalidades:
   - confiança mínima.
 - Marcação de revisão persistida.
 - Download de alertas e relatório de ciclo em múltiplos formatos.
+- Atualização periódica do dashboard e dos alertas via fragmentos Streamlit.
+
+### 8. Execução em containers
+
+- Uma imagem multi-stage e não-root é compartilhada pelos serviços `worker` e `web`.
+- O Compose mantém os processos isolados e compartilha apenas o volume SQLite.
+- O worker executa `main.py --watch`; a interface expõe a porta `8501` e possui healthcheck.
 
 ## Modelo de Dados (Resumo)
 

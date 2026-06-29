@@ -98,7 +98,11 @@ LLM_TIMEOUT_SECONDS=60
 LLM_MAX_TOKENS=1200
 LLM_TEMPERATURE=0.1
 
-BCB_NEWS_API_URL=https://www.bcb.gov.br/api/servico/sitebcb/noticias?quantidade=20
+BCB_NEWS_API_URL=
+BCB_HISTORY_LIMIT=200
+CVM_MAX_PAGES=20
+MONITOR_INTERVAL_SECONDS=3600
+DASHBOARD_REFRESH_SECONDS=60
 ```
 
 Modelos úteis disponíveis no servidor da disciplina incluem `llama3.2:3b` para testes rápidos e `deepseek-r1:8b` para análises mais fortes.
@@ -117,10 +121,47 @@ Rode o pipeline completo:
 python3 main.py
 ```
 
+Rode o worker automático (um ciclo imediato e novos ciclos a cada hora):
+
+```bash
+python3 main.py --watch
+```
+
+O intervalo pode ser alterado com `--interval-seconds N` ou pela variável
+`MONITOR_INTERVAL_SECONDS`.
+
 Rode a interface:
 
 ```bash
 streamlit run app.py
+```
+
+A interface relê métricas e alertas persistidos a cada 60 segundos enquanto a
+sessão estiver aberta.
+
+## Docker
+
+Após criar o `.env`, construa e suba o worker e a interface:
+
+```bash
+docker compose up --build -d
+```
+
+A interface fica disponível em `http://localhost:8501`. Os dois serviços usam
+a mesma imagem e persistem o SQLite no volume nomeado `regulatory-data`.
+
+Comandos operacionais:
+
+```bash
+docker compose ps
+docker compose logs -f worker
+docker compose down
+```
+
+`docker compose down` preserva o volume. Para executar apenas um ciclo isolado:
+
+```bash
+docker compose run --rm worker python main.py
 ```
 
 Rode os testes:
