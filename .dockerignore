@@ -1,0 +1,10 @@
+**
+!.dockerignore
+!Dockerfile
+!requirements.txt
+!app.py
+!main.py
+!src/
+!src/**
+!database/
+!database/**

@@ -1,0 +1,47 @@
+x-app: &app
+  build:
+    context: .
+  image: regulatory-monitor:local
+  env_file:
+    - .env
+  environment:
+    DB_PATH: /app/data/regulatory_monitor.db
+    LOG_FILE: ""
+    MONITOR_INTERVAL_SECONDS: ${MONITOR_INTERVAL_SECONDS:-3600}
+    DASHBOARD_REFRESH_SECONDS: ${DASHBOARD_REFRESH_SECONDS:-60}
+    BCB_HISTORY_LIMIT: ${BCB_HISTORY_LIMIT:-200}
+    CVM_MAX_PAGES: ${CVM_MAX_PAGES:-20}
+    PENDING_DOCUMENT_LIMIT: ${PENDING_DOCUMENT_LIMIT:-200}
+  volumes:
+    - regulatory-data:/app/data
+  restart: unless-stopped
+
+services:
+  worker:
+    <<: *app
+    command: ["python", "main.py", "--watch"]
+
+  web:
+    <<: *app
+    command:
+      - streamlit
+      - run
+      - app.py
+      - --server.address=0.0.0.0
+      - --server.port=8501
+      - --server.headless=true
+    ports:
+      - "8501:8501"
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - "import urllib.request; urllib.request.urlopen('http://localhost:8501/_stcore/health', timeout=5)"
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 20s
+
+volumes:
+  regulatory-data:
