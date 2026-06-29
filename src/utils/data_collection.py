@@ -20,11 +20,21 @@ from bs4 import BeautifulSoup
 logger = logging.getLogger(__name__)
 
 
+class ClosingSQLiteConnection(sqlite3.Connection):
+    """Conexão que fecha o descritor ao concluir o bloco transacional."""
+
+    def __exit__(self, exc_type, exc_value, traceback):
+        try:
+            return super().__exit__(exc_type, exc_value, traceback)
+        finally:
+            self.close()
+
+
 class DataCollector:
     """Coleta documentos de fontes regulatórias"""
 
     # URLs principais
-    BCB_NEWS_API = "https://www.bcb.gov.br/api/servico/sitebcb/noticias?quantidade=20"
+    BCB_NEWS_API = "https://www.bcb.gov.br/api/servico/sitebcb/noticias?quantidade=200"
     BCB_BASE_URL = "https://www.bcb.gov.br"
     CVM_BASE_URL = "https://www.cvm.gov.br"
 
@@ -417,9 +427,14 @@ class DocumentRepository:
         self._init_db()
 
     def _get_connection(self) -> sqlite3.Connection:
-        connection = sqlite3.connect(self.db_path)
+        connection = sqlite3.connect(
+            self.db_path,
+            timeout=30,
+            factory=ClosingSQLiteConnection,
+        )
         connection.row_factory = sqlite3.Row
         connection.execute("PRAGMA foreign_keys = ON")
+        connection.execute("PRAGMA busy_timeout = 30000")
         return connection
 
     def _init_db(self):
@@ -430,6 +445,7 @@ class DocumentRepository:
             schema_sql = self._fallback_schema()
 
         with self._get_connection() as conn:
+            conn.execute("PRAGMA journal_mode = WAL")
             conn.executescript(schema_sql)
             try:
                 conn.execute("ALTER TABLE alerts ADD COLUMN archived INTEGER NOT NULL DEFAULT 0")

@@ -141,6 +141,20 @@ class TestDocumentRepository(unittest.TestCase):
         self.assertEqual(history[0]["cycle_id"], "cycle-001")
         self.assertEqual(history[0]["alerts_generated"], 3)
 
+    def test_get_alerts_returns_more_than_five_records(self):
+        for index in range(8):
+            self.repo.save_alert(
+                None,
+                {
+                    "alert_id": f"ALR-HISTORY-{index}",
+                    "created_at": datetime.now().isoformat(),
+                    "priority": "BAIXO",
+                    "human_reviewed": False,
+                },
+            )
+
+        self.assertEqual(len(self.repo.get_alerts()), 8)
+
 
 if __name__ == "__main__":
     unittest.main()

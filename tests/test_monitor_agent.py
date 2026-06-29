@@ -2,6 +2,8 @@
 Testes para Monitor Agent
 """
 import unittest
+import tempfile
+from pathlib import Path
 from src.agents.monitor_agent import MonitorAgent, RegulatoryDocument
 from datetime import datetime
 from unittest.mock import patch
@@ -12,7 +14,11 @@ class TestMonitorAgent(unittest.TestCase):
     """Testes do Monitor Agent"""
     
     def setUp(self):
-        self.monitor = MonitorAgent()
+        self.temp_dir = tempfile.TemporaryDirectory()
+        self.monitor = MonitorAgent(str(Path(self.temp_dir.name) / "monitor.db"))
+
+    def tearDown(self):
+        self.temp_dir.cleanup()
     
     def test_initialization(self):
         """Testa inicialização do agente"""
@@ -20,6 +26,33 @@ class TestMonitorAgent(unittest.TestCase):
         self.assertEqual(len(self.monitor.sources), 2)
         self.assertIn("BCB", self.monitor.sources)
         self.assertIn("CVM", self.monitor.sources)
+
+    def test_default_bcb_history_limit_and_override(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            db_path = Path(temp_dir) / "monitor.db"
+            with patch.dict(
+                "os.environ",
+                {
+                    "BCB_HISTORY_LIMIT": "200",
+                    "BCB_NEWS_API_URL": "",
+                    "BCB_RSS_URL": "",
+                },
+            ):
+                monitor = MonitorAgent(str(db_path))
+
+            self.assertEqual(monitor.bcb_history_limit, 200)
+            self.assertIn("quantidade=200", monitor.sources["BCB"])
+
+    @patch.object(MonitorAgent, "_parse_cvm_legislation_page")
+    def test_default_cvm_history_uses_twenty_pages(self, mock_parse):
+        mock_parse.side_effect = [
+            ([], f"https://example.com/cvm?page={page + 1}")
+            for page in range(1, 21)
+        ]
+        with patch.dict("os.environ", {"CVM_MAX_PAGES": "20"}):
+            self.monitor._fetch_cvm_documents("https://example.com/cvm?page=1")
+
+        self.assertEqual(mock_parse.call_count, 20)
     
     def test_eliminate_duplicates(self):
         """Testa eliminação de documentos duplicados"""

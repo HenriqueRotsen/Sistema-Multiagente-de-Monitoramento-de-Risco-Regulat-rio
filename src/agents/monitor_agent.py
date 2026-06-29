@@ -32,7 +32,9 @@ except ImportError:  # pragma: no cover - fallback keeps CLI usable before pip i
 logger = logging.getLogger(__name__)
 
 
-BCB_NEWS_API = "https://www.bcb.gov.br/api/servico/sitebcb/noticias?quantidade=20"
+BCB_NEWS_API_BASE = "https://www.bcb.gov.br/api/servico/sitebcb/noticias"
+BCB_HISTORY_LIMIT_DEFAULT = 200
+BCB_NEWS_API = f"{BCB_NEWS_API_BASE}?quantidade={BCB_HISTORY_LIMIT_DEFAULT}"
 CVM_LEGISLATION_URL = "https://conteudo.cvm.gov.br/legislacao/index.html?buscado=true&contCategoriasChec="
 
 
@@ -64,8 +66,12 @@ class MonitorAgent:
         self.db_path = db_path or os.getenv("DB_PATH", "regulatory_monitor.db")
         self.repository = DocumentRepository(self.db_path)
         self.processed_docs = set()
+        self.bcb_history_limit = max(
+            1, int(os.getenv("BCB_HISTORY_LIMIT", str(BCB_HISTORY_LIMIT_DEFAULT)))
+        )
+        default_bcb_url = f"{BCB_NEWS_API_BASE}?quantidade={self.bcb_history_limit}"
         self.sources = {
-            "BCB": os.getenv("BCB_NEWS_API_URL") or os.getenv("BCB_RSS_URL", BCB_NEWS_API),
+            "BCB": os.getenv("BCB_NEWS_API_URL") or os.getenv("BCB_RSS_URL") or default_bcb_url,
             "CVM": os.getenv("CVM_LEGISLATION_URL", CVM_LEGISLATION_URL),
         }
         self.retry_attempts = max(0, int(os.getenv("SOURCE_RETRY_ATTEMPTS", "2")))
@@ -183,7 +189,7 @@ class MonitorAgent:
         - Seguir paginação por algumas páginas para capturar histórico recente
         """
         base_url = url or CVM_LEGISLATION_URL
-        max_pages = max(1, int(os.getenv("CVM_MAX_PAGES", "2")))
+        max_pages = max(1, int(os.getenv("CVM_MAX_PAGES", "20")))
         documents: List[RegulatoryDocument] = []
         visited_pages = set()
         next_page_url = base_url

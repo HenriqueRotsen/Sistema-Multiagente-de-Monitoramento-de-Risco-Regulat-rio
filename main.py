@@ -6,6 +6,7 @@ import argparse
 import hashlib
 import logging
 import os
+import time
 from pathlib import Path
 from typing import List, Dict, Any
 from datetime import datetime
@@ -143,6 +144,23 @@ class RegulatoryMonitoringSystem:
         
         return cycle_result
 
+    def run_forever(self, interval_seconds: int = 3600) -> None:
+        """Executa ciclos sequenciais até o processo ser interrompido."""
+        if interval_seconds <= 0:
+            raise ValueError("O intervalo de monitoramento deve ser maior que zero.")
+
+        logger.info(
+            "Monitoramento contínuo iniciado com intervalo de %s segundos",
+            interval_seconds,
+        )
+        while True:
+            try:
+                self.run_monitoring_cycle()
+            except Exception:
+                logger.exception("Falha inesperada no ciclo; o worker continuará ativo")
+            logger.info("Próximo ciclo em %s segundos", interval_seconds)
+            time.sleep(interval_seconds)
+
     def _collect_documents(
         self,
         manual_documents: List[Dict[str, Any]] = None,
@@ -191,7 +209,9 @@ class RegulatoryMonitoringSystem:
             self.repository.add_document(doc)
 
         if not documents_as_dict:
-            pending_limit = limit if limit is not None else 10
+            pending_limit = limit if limit is not None else max(
+                1, int(os.getenv("PENDING_DOCUMENT_LIMIT", "200"))
+            )
             pending_docs = self.repository.get_pending_documents(limit=pending_limit)
             if pending_docs:
                 logger.info(
@@ -337,11 +357,29 @@ def main():
         default=None,
         help="Limita a quantidade de documentos coletados/analisados no ciclo.",
     )
+    parser.add_argument(
+        "--watch",
+        action="store_true",
+        help="Executa ciclos continuamente no intervalo configurado.",
+    )
+    parser.add_argument(
+        "--interval-seconds",
+        type=int,
+        default=int(os.getenv("MONITOR_INTERVAL_SECONDS", "3600")),
+        help="Intervalo entre ciclos no modo --watch (padrão: 3600).",
+    )
     args = parser.parse_args()
     
     # Cria sistema
     system = RegulatoryMonitoringSystem()
     
+    if args.watch:
+        try:
+            system.run_forever(interval_seconds=args.interval_seconds)
+        except KeyboardInterrupt:
+            logger.info("Monitoramento contínuo interrompido")
+        return
+
     # Executa ciclo de monitoramento
     result = system.run_monitoring_cycle(limit=args.limit)
     
