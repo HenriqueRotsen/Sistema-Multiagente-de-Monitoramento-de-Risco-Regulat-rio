@@ -6,9 +6,14 @@ from datetime import datetime
 import csv
 import io
 import json
+import os
 
 from main import RegulatoryMonitoringSystem
 
+
+DASHBOARD_REFRESH_SECONDS = max(
+    1, int(os.getenv("DASHBOARD_REFRESH_SECONDS", "60"))
+)
 
 st.set_page_config(
     page_title="Monitor de Risco Regulatório",
@@ -21,12 +26,6 @@ def init_session_state():
     """Inicializa estado da sessão"""
     if 'system' not in st.session_state:
         st.session_state.system = RegulatoryMonitoringSystem()
-    if 'alerts' not in st.session_state:
-        st.session_state.alerts = st.session_state.system.get_persisted_alerts()
-    if 'reviewed_alerts' not in st.session_state:
-        st.session_state.reviewed_alerts = {}
-    if 'cycle_history' not in st.session_state:
-        st.session_state.cycle_history = st.session_state.system.get_cycle_history(limit=20)
 
 
 def _confidence_to_score(confidence_label: str) -> float:
@@ -77,6 +76,7 @@ def _alerts_to_csv(alerts):
     return output.getvalue()
 
 
+@st.fragment(run_every=DASHBOARD_REFRESH_SECONDS)
 def render_header():
     """Renderiza cabeçalho da aplicação"""
     col1, col2 = st.columns([3, 1])
@@ -85,16 +85,19 @@ def render_header():
         st.markdown("*Sistema de Monitoramento Automatizado de Alterações Regulatórias Brasileiras*")
     
     with col2:
-        st.markdown(f"**Status:** 🟢 Online")
-        st.markdown(f"**Última atualização:** {datetime.now().strftime('%H:%M:%S')}")
+        status = st.session_state.system.get_system_status()
+        last_update = status.get("monitor", {}).get("last_update")
+        st.markdown("**Status:** 🟢 Online")
+        st.markdown(f"**Última atualização:** {last_update or 'Ainda não executado'}")
 
 
+@st.fragment(run_every=DASHBOARD_REFRESH_SECONDS)
 def render_dashboard():
     """Renderiza dashboard principal"""
     st.header("📊 Dashboard")
     status = st.session_state.system.get_system_status()
     alert_stats = status.get("alerts_generated", {})
-    cycles = st.session_state.cycle_history
+    cycles = st.session_state.system.get_cycle_history(limit=20)
     
     # KPIs
     col1, col2, col3, col4 = st.columns(4)
@@ -141,15 +144,19 @@ def render_dashboard():
         st.info("Nenhum ciclo executado foi persistido ainda.")
 
 
+@st.fragment(run_every=DASHBOARD_REFRESH_SECONDS)
 def render_alerts_section():
     """Renderiza seção de alertas"""
     st.header("🔔 Alertas Regulatórios")
+    alerts = st.session_state.system.get_persisted_alerts(
+        include_archived=st.session_state.get("show_archived", False)
+    )
 
     # --- Filtros ---
     all_activities = sorted(
         {
             activity
-            for alert in st.session_state.alerts
+            for alert in alerts
             for activity in alert.get("affected_activities", [])
         }
     )
@@ -186,9 +193,9 @@ def render_alerts_section():
     st.divider()
 
     # --- Filtragem ---
-    if st.session_state.alerts:
+    if alerts:
         filtered_alerts = []
-        for alert in st.session_state.alerts:
+        for alert in alerts:
             priority_ok = not priority_filter or alert.get("priority") in priority_filter
             regulator_ok = not regulator_filter or alert.get("regulatory_body") in regulator_filter
             confidence_ok = _confidence_to_score(alert.get("confidence_level")) >= min_confidence
@@ -249,23 +256,21 @@ def render_alerts_section():
                         st.markdown(f"**Fonte:** [{source_url}]({source_url})")
 
                 with col2:
-                    if st.button("✅ Revisar", key=f"review_{i}"):
+                    alert_id = alert["alert_id"]
+                    if st.button("✅ Revisar", key=f"review_{alert_id}"):
                         updated = st.session_state.system.mark_alert_reviewed(
-                            alert["alert_id"],
+                            alert_id,
                             reviewer_notes="Revisado via interface Streamlit",
                         )
                         if updated:
-                            st.session_state.reviewed_alerts[alert["alert_id"]] = True
-                            st.session_state.alerts = st.session_state.system.get_persisted_alerts()
                             st.success("Alerta marcado como revisado!")
                             st.rerun()
                         else:
                             st.error("Não foi possível marcar o alerta como revisado.")
 
-                    if st.button("📌 Arquivar", key=f"archive_{i}"):
-                        archived = st.session_state.system.archive_alert(alert["alert_id"])
+                    if st.button("📌 Arquivar", key=f"archive_{alert_id}"):
+                        archived = st.session_state.system.archive_alert(alert_id)
                         if archived:
-                            st.session_state.alerts = st.session_state.system.get_persisted_alerts()
                             st.success("Alerta arquivado com sucesso!")
                             st.rerun()
                         else:
@@ -282,13 +287,19 @@ def render_execution_panel():
     st.header("⚙️ Controle de Execução")
     
     col1, col2 = st.columns(2)
+    alerts = st.session_state.system.get_persisted_alerts(
+        include_archived=st.session_state.get("show_archived", False)
+    )
+    cycle_history = st.session_state.system.get_cycle_history(limit=20)
     
     with col1:
         if st.button("🔄 Executar Ciclo de Monitoramento", key="run_cycle"):
             with st.spinner("Executando monitoramento..."):
-                result = st.session_state.system.run_monitoring_cycle(limit=10)
-                st.session_state.alerts = st.session_state.system.get_persisted_alerts()
-                st.session_state.cycle_history = st.session_state.system.get_cycle_history(limit=20)
+                result = st.session_state.system.run_monitoring_cycle()
+                alerts = st.session_state.system.get_persisted_alerts(
+                    include_archived=st.session_state.get("show_archived", False)
+                )
+                cycle_history = st.session_state.system.get_cycle_history(limit=20)
                 
                 st.success(f"✓ Ciclo concluído!")
                 st.json({
@@ -298,14 +309,14 @@ def render_execution_panel():
                 })
     
     with col2:
-        if st.session_state.alerts:
+        if alerts:
             export_format = st.selectbox(
                 "Formato de exportação de alertas",
                 ["json", "csv", "html", "pdf"],
                 index=0,
             )
             alert_payload = st.session_state.system.export_alerts(
-                st.session_state.alerts,
+                alerts,
                 format=export_format,
             )
             mime_map = {
@@ -321,7 +332,7 @@ def render_execution_panel():
                 mime=mime_map.get(export_format, "application/octet-stream"),
             )
 
-            latest_cycle = st.session_state.cycle_history[0] if st.session_state.cycle_history else None
+            latest_cycle = cycle_history[0] if cycle_history else None
             if latest_cycle:
                 cycle_export_format = st.selectbox(
                     "Formato do relatório consolidado do último ciclo",
@@ -400,11 +411,7 @@ def render_sidebar():
 
         st.subheader("Visualização")
         show_archived = st.checkbox("Mostrar alertas arquivados", value=False)
-        if show_archived != st.session_state.get("show_archived", False):
-            st.session_state["show_archived"] = show_archived
-            st.session_state.alerts = st.session_state.system.get_persisted_alerts(
-                include_archived=show_archived
-            )
+        st.session_state["show_archived"] = show_archived
 
         st.divider()
 
