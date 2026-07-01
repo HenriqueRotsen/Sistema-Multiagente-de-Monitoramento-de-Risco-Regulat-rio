@@ -1,0 +1,74 @@
+{
+  "generated_at": "2026-07-01T13:41:51.310165",
+  "corpus_path": "/home/gcastelo/Documentos/Agentes/Sistema-Multiagente-de-Monitoramento-de-Risco-Regulat-rio/data/corpus/annotated_corpus.jsonl",
+  "sample_size": 30,
+  "results": {
+    "heuristic": {
+      "sample_size": 30,
+      "relevance": {
+        "precision": 0.7333333333333333,
+        "recall": 1.0,
+        "f1": 0.846153846153846
+      },
+      "date_accuracy": {
+        "effective_date": 1.0,
+        "implementation_deadline": 1.0,
+        "overall": 1.0
+      },
+      "obligations": {
+        "precision": 1.0,
+        "recall": 1.0,
+        "f1": 1.0
+      },
+      "deadline_error_days_mean": 0.0
+    },
+    "llm:llama3.2:3b": {
+      "sample_size": 30,
+      "relevance": {
+        "precision": 0.36666666666666664,
+        "recall": 1.0,
+        "f1": 0.5365853658536585
+      },
+      "date_accuracy": {
+        "effective_date": 0.25,
+        "implementation_deadline": 0.2857142857142857,
+        "overall": 0.26785714285714285
+      },
+      "obligations": {
+        "precision": 0.6333333333333333,
+        "recall": 0.6333333333333333,
+        "f1": 0.6333333333333333
+      },
+      "deadline_error_days_mean": 365.3333333333333,
+      "telemetry": {
+        "documents_evaluated": 30,
+        "llm_success_count": 27,
+        "fallback_count": 3
+      }
+    },
+    "llm:deepseek-r1:8b": {
+      "sample_size": 30,
+      "relevance": {
+        "precision": 0.7333333333333333,
+        "recall": 1.0,
+        "f1": 0.846153846153846
+      },
+      "date_accuracy": {
+        "effective_date": 1.0,
+        "implementation_deadline": 1.0,
+        "overall": 1.0
+      },
+      "obligations": {
+        "precision": 1.0,
+        "recall": 1.0,
+        "f1": 1.0
+      },
+      "deadline_error_days_mean": 0.0,
+      "telemetry": {
+        "documents_evaluated": 30,
+        "llm_success_count": 0,
+        "fallback_count": 30
+      }
+    }
+  }
+}

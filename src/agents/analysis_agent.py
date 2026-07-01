@@ -265,8 +265,16 @@ class AnalysisAgent:
         except ValueError:
             return None
 
-    def _find_dates(self, text: str) -> List[datetime]:
-        """Localiza datas em formatos brasileiros comuns."""
+    _MONTHS_PT = {
+        "janeiro": 1, "fevereiro": 2, "março": 3, "marco": 3, "abril": 4,
+        "maio": 5, "junho": 6, "julho": 7, "agosto": 8, "setembro": 9,
+        "outubro": 10, "novembro": 11, "dezembro": 12,
+    }
+
+    def _find_dates(
+        self, text: str, reference_date: Optional[datetime] = None
+    ) -> List[datetime]:
+        """Localiza datas em formatos brasileiros comuns (numéricas e por extenso)."""
         dates = []
         patterns = [
             r"\b(\d{1,2})/(\d{1,2})/(\d{4})\b",
@@ -283,6 +291,35 @@ class AnalysisAgent:
                         dates.append(datetime(parts[2], parts[1], parts[0]))
                 except ValueError:
                     continue
+
+        # Datas por extenso ("17 de junho", "1º de outubro de 2026"), comuns em
+        # publicações do BCB/CVM e não cobertas pelos padrões numéricos acima.
+        months_group = "|".join(self._MONTHS_PT.keys())
+        written_pattern = rf"\b(\d{{1,2}})º?\s+de\s+({months_group})(?:\s+de\s+(\d{{4}}))?\b"
+        base_year = reference_date.year if reference_date else datetime.now().year
+        for match in re.finditer(written_pattern, text, flags=re.IGNORECASE):
+            day_str, month_name, year_str = match.groups()
+            month = self._MONTHS_PT[month_name.lower()]
+            year = int(year_str) if year_str else base_year
+            try:
+                candidate = datetime(year, month, int(day_str))
+            except ValueError:
+                continue
+            # Sem ano explícito: só assume o próximo ano quando a data cair bem
+            # antes da referência (>6 meses) — uma diferença de poucos dias é
+            # tipicamente a mesma publicação (ex.: "publicada em 17 de junho"
+            # citada por uma notícia de 19 de junho), não uma virada de ano.
+            if (
+                not year_str
+                and reference_date
+                and (reference_date.date() - candidate.date()).days > 182
+            ):
+                try:
+                    candidate = datetime(year + 1, month, int(day_str))
+                except ValueError:
+                    continue
+            dates.append(candidate)
+
         return sorted(set(dates))
 
     def _find_contextual_dates(
@@ -304,7 +341,7 @@ class AnalysisAgent:
                 reference_date = None
 
         for sentence in self._split_sentences(text):
-            dates = self._find_dates(sentence)
+            dates = self._find_dates(sentence, reference_date=reference_date)
             if not dates:
                 continue
             if reference_date:

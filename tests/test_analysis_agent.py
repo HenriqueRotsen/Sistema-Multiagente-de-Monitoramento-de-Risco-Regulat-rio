@@ -2,6 +2,7 @@
 Testes para Analysis Agent
 """
 import unittest
+from datetime import datetime
 
 from src.agents.analysis_agent import AnalysisAgent
 
@@ -70,6 +71,54 @@ class TestAnalysisAgent(unittest.TestCase):
         self.assertTrue(result.obligations)
         self.assertEqual(result.implementation_deadline.year, 2025)
         self.assertGreater(result.impact_score, 0.3)
+
+    def test_fallback_extracts_written_date_with_year(self):
+        agent = AnalysisAgent()
+        result = agent.analyze_document(
+            "A norma entra em vigor a partir de 17 de junho de 2025. As instituições "
+            "de pagamento deverão adequar seus sistemas até 1º de outubro de 2025.",
+            {
+                "id": "doc3",
+                "source": "BCB",
+                "document_type": "Circular",
+                "title": "Circular por extenso",
+            },
+        )
+
+        self.assertEqual(result.effective_date, datetime(2025, 6, 17))
+        self.assertEqual(result.implementation_deadline, datetime(2025, 10, 1))
+
+    def test_fallback_extracts_written_date_without_year_using_reference(self):
+        agent = AnalysisAgent()
+        result = agent.analyze_document(
+            "A norma entra em vigor a partir de 17 de junho. As instituições de "
+            "pagamento deverão adequar seus sistemas até 1º de outubro.",
+            {
+                "id": "doc4",
+                "source": "BCB",
+                "document_type": "Circular",
+                "title": "Circular por extenso sem ano",
+                "published_date": datetime(2025, 6, 1),
+            },
+        )
+
+        self.assertEqual(result.effective_date, datetime(2025, 6, 17))
+        self.assertEqual(result.implementation_deadline, datetime(2025, 10, 1))
+
+    def test_fallback_written_date_without_year_rolls_to_next_year(self):
+        agent = AnalysisAgent()
+        result = agent.analyze_document(
+            "As instituições de pagamento deverão adequar seus sistemas até 15 de janeiro.",
+            {
+                "id": "doc5",
+                "source": "BCB",
+                "document_type": "Circular",
+                "title": "Circular com prazo virando o ano",
+                "published_date": datetime(2025, 12, 1),
+            },
+        )
+
+        self.assertEqual(result.implementation_deadline, datetime(2026, 1, 15))
 
 
 if __name__ == "__main__":
