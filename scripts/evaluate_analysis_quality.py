@@ -4,6 +4,12 @@ Avala qualidade da análise contra corpus anotado.
 Uso:
 python3 scripts/evaluate_analysis_quality.py --corpus data/corpus/annotated_corpus.jsonl --models llama3.2:3b,deepseek-r1:8b
 python3 scripts/evaluate_analysis_quality.py --corpus data/corpus/annotated_corpus.jsonl --heuristic-only
+
+Cada entrada de --models aceita "modelo" (usa LLM_BASE_URL/LLM_API_KEY do .env)
+ou "modelo@base_url[@api_key]", para comparar modelos servidos por endpoints
+diferentes na mesma execução (ex.: proxy remoto vs. servidor local):
+python3 scripts/evaluate_analysis_quality.py --corpus data/corpus/annotated_corpus.jsonl \
+    --models "llama3.2:3b,openai/gpt-oss-20b@http://localhost:1234/v1"
 """
 from __future__ import annotations
 
@@ -80,16 +86,34 @@ def _check_health(base_url: str) -> Optional[str]:
         return f"health check falhou: {exc}"
 
 
+def _parse_model_spec(spec: str) -> tuple[str, Optional[str], Optional[str]]:
+    """Aceita "modelo" ou "modelo@base_url[@api_key]", permitindo comparar
+    modelos servidos por endpoints diferentes (ex.: proxy remoto vs. servidor
+    local) na mesma execução."""
+    parts = spec.split("@")
+    model_name = parts[0].strip()
+    base_url_override = parts[1].strip() if len(parts) > 1 and parts[1].strip() else None
+    api_key_override = parts[2].strip() if len(parts) > 2 and parts[2].strip() else None
+    return model_name, base_url_override, api_key_override
+
+
 def run_predictions_llm(
     corpus: list[dict],
     model_name: str,
     llm_timeout_seconds: int,
     llm_max_tokens: int,
     llm_retries: int,
+    base_url_override: Optional[str] = None,
+    api_key_override: Optional[str] = None,
 ) -> tuple[dict[str, dict], dict]:
     config = RegulatoryLLMConfig.from_env()
     if not config:
         raise RuntimeError("LLM não configurado no ambiente para avaliação por modelo.")
+
+    if base_url_override:
+        config.base_url = base_url_override.rstrip("/")
+        config.provider = "ollama" if "ollama" in config.base_url.lower() else "openai"
+        config.api_key = api_key_override
 
     health_warning = _check_health(config.base_url)
     config.model = model_name
@@ -121,6 +145,7 @@ def run_predictions_llm(
         "documents_evaluated": len(corpus),
         "llm_success_count": llm_ok,
         "fallback_count": fallback_count,
+        "base_url": config.base_url,
     }
     if health_warning:
         telemetry["health_warning"] = health_warning
@@ -166,9 +191,10 @@ def main():
     evaluations["heuristic"] = evaluate_corpus_predictions(corpus, heuristic_predictions)
 
     if not args.heuristic_only:
-        model_names = [name.strip() for name in args.models.split(",") if name.strip()]
+        model_specs = [spec.strip() for spec in args.models.split(",") if spec.strip()]
         comparison_corpus = corpus[: max(1, args.comparison_samples)]
-        for model_name in model_names:
+        for spec in model_specs:
+            model_name, base_url_override, api_key_override = _parse_model_spec(spec)
             try:
                 predictions, telemetry = run_predictions_llm(
                     comparison_corpus,
@@ -176,6 +202,8 @@ def main():
                     llm_timeout_seconds=args.llm_timeout,
                     llm_max_tokens=args.llm_max_tokens,
                     llm_retries=args.llm_retries,
+                    base_url_override=base_url_override,
+                    api_key_override=api_key_override,
                 )
                 evaluations[f"llm:{model_name}"] = {
                     **evaluate_corpus_predictions(comparison_corpus, predictions),

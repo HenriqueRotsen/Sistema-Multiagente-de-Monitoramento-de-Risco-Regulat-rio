@@ -1,0 +1,76 @@
+{
+  "generated_at": "2026-07-01T14:07:38.128180",
+  "corpus_path": "/home/gcastelo/Documentos/Agentes/Sistema-Multiagente-de-Monitoramento-de-Risco-Regulat-rio/data/corpus/annotated_corpus.jsonl",
+  "sample_size": 30,
+  "results": {
+    "heuristic": {
+      "sample_size": 30,
+      "relevance": {
+        "precision": 0.7333333333333333,
+        "recall": 1.0,
+        "f1": 0.846153846153846
+      },
+      "date_accuracy": {
+        "effective_date": 1.0,
+        "implementation_deadline": 1.0,
+        "overall": 1.0
+      },
+      "obligations": {
+        "precision": 1.0,
+        "recall": 1.0,
+        "f1": 1.0
+      },
+      "deadline_error_days_mean": 0.0
+    },
+    "llm:llama3.2:3b": {
+      "sample_size": 30,
+      "relevance": {
+        "precision": 0.36666666666666664,
+        "recall": 1.0,
+        "f1": 0.5365853658536585
+      },
+      "date_accuracy": {
+        "effective_date": 0.25,
+        "implementation_deadline": 0.2857142857142857,
+        "overall": 0.26785714285714285
+      },
+      "obligations": {
+        "precision": 0.7333333333333333,
+        "recall": 0.711111111111111,
+        "f1": 0.7166666666666667
+      },
+      "deadline_error_days_mean": 385.0,
+      "telemetry": {
+        "documents_evaluated": 30,
+        "llm_success_count": 27,
+        "fallback_count": 3,
+        "base_url": "https://ollama.futurelab.dcc.ufmg.br"
+      }
+    },
+    "llm:openai/gpt-oss-20b": {
+      "sample_size": 30,
+      "relevance": {
+        "precision": 0.7333333333333333,
+        "recall": 1.0,
+        "f1": 0.846153846153846
+      },
+      "date_accuracy": {
+        "effective_date": 1.0,
+        "implementation_deadline": 0.8571428571428571,
+        "overall": 0.9285714285714286
+      },
+      "obligations": {
+        "precision": 1.0,
+        "recall": 1.0,
+        "f1": 1.0
+      },
+      "deadline_error_days_mean": 0.0,
+      "telemetry": {
+        "documents_evaluated": 30,
+        "llm_success_count": 7,
+        "fallback_count": 23,
+        "base_url": "http://localhost:1234/v1"
+      }
+    }
+  }
+}
