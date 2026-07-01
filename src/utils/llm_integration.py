@@ -19,6 +19,49 @@ import requests
 
 logger = logging.getLogger(__name__)
 
+_RESPONSE_SCHEMA: Dict[str, Any] = {
+    "type": "object",
+    "properties": {
+        "summary": {"type": "string"},
+        "effective_date": {"type": ["string", "null"]},
+        "implementation_deadline": {"type": ["string", "null"]},
+        "affected_activities": {"type": "array", "items": {"type": "string"}},
+        "affected_entities": {"type": "array", "items": {"type": "string"}},
+        "obligations": {"type": "array", "items": {"type": "string"}},
+        "recommendations": {"type": "array", "items": {"type": "string"}},
+        "keywords": {"type": "array", "items": {"type": "string"}},
+        "impact_score": {"type": "number"},
+        "impact_description": {"type": "string"},
+        "impact_areas": {"type": "array", "items": {"type": "string"}},
+        "confidence_scores": {
+            "type": "object",
+            "properties": {
+                "summary": {"type": "number"},
+                "dates": {"type": "number"},
+                "obligations": {"type": "number"},
+                "impact": {"type": "number"},
+            },
+            "required": ["summary", "dates", "obligations", "impact"],
+            "additionalProperties": False,
+        },
+    },
+    "required": [
+        "summary",
+        "effective_date",
+        "implementation_deadline",
+        "affected_activities",
+        "affected_entities",
+        "obligations",
+        "recommendations",
+        "keywords",
+        "impact_score",
+        "impact_description",
+        "impact_areas",
+        "confidence_scores",
+    ],
+    "additionalProperties": False,
+}
+
 
 @dataclass
 class RegulatoryLLMConfig:
@@ -126,7 +169,16 @@ class RegulatoryLLM:
             ],
         }
 
-        data = self._post_json_with_retry(url, headers, payload, provider_name="ollama")
+        # Restringe a decodificacao ao schema via grammar (suportado desde Ollama
+        # 0.5+); reduz drasticamente respostas com JSON invalido comparado a pedir
+        # o formato apenas via instrucao no prompt.
+        try:
+            data = self._post_json_with_retry(
+                url, headers, {**payload, "format": _RESPONSE_SCHEMA}, provider_name="ollama"
+            )
+        except RuntimeError:
+            logger.warning("Chamada estruturada (format=schema) falhou; tentando sem restricao de schema.")
+            data = self._post_json_with_retry(url, headers, payload, provider_name="ollama")
         if "error" in data:
             raise RuntimeError(f"Ollama erro: {data['error']}")
         return data["message"]["content"]
@@ -153,7 +205,25 @@ class RegulatoryLLM:
             ],
         }
 
-        data = self._post_json_with_retry(url, headers, payload, provider_name="openai")
+        # Mesma ideia do lado Ollama: usa json_schema (grammar-constrained
+        # decoding) quando o servidor suportar, com fallback para o formato
+        # livre caso o backend rejeite o parametro.
+        structured_payload = {
+            **payload,
+            "response_format": {
+                "type": "json_schema",
+                "json_schema": {
+                    "name": "regulatory_analysis",
+                    "strict": True,
+                    "schema": _RESPONSE_SCHEMA,
+                },
+            },
+        }
+        try:
+            data = self._post_json_with_retry(url, headers, structured_payload, provider_name="openai")
+        except RuntimeError:
+            logger.warning("Chamada estruturada (response_format=json_schema) falhou; tentando sem ela.")
+            data = self._post_json_with_retry(url, headers, payload, provider_name="openai")
         return data["choices"][0]["message"]["content"]
 
     def _post_json_with_retry(
@@ -223,33 +293,16 @@ Metadados:
 Atividades monitoradas: {activities}
 Areas de risco esperadas: {risk_areas}
 
-Retorne SOMENTE um JSON valido com estas chaves:
-{{
-  "summary": "resumo objetivo em portugues, ate 120 palavras",
-  "effective_date": "YYYY-MM-DD ou null",
-  "implementation_deadline": "YYYY-MM-DD ou null",
-  "affected_activities": ["lista curta"],
-  "affected_entities": ["lista curta"],
-  "obligations": ["obrigacoes concretas, se houver"],
-  "recommendations": ["acoes iniciais recomendadas para triagem humana"],
-  "keywords": ["ate 8 termos"],
-  "impact_score": 0.0,
-  "impact_description": "avaliacao curta de impacto para o setor",
-  "impact_areas": ["Compliance", "Tecnologia", "Operacional", "Juridico", "Produtos", "Risco"],
-  "confidence_scores": {{
-    "summary": 0.0,
-    "dates": 0.0,
-    "obligations": 0.0,
-    "impact": 0.0
-  }}
-}}
-
-Regras:
-- Use null quando uma data ou prazo nao estiver explicito.
-- Nao transforme recomendacoes gerais em obrigacoes.
-- Recomende acoes de triagem, nao aconselhamento juridico definitivo.
-- Se o documento for apenas noticia sobre evento ou pesquisa, deixe "obligations" vazio e reduza "impact_score".
-- "impact_score" deve ficar entre 0 e 1.
+Responda em JSON preenchendo os campos do resultado seguindo estas orientacoes:
+- summary: resumo objetivo em portugues, ate 120 palavras.
+- effective_date / implementation_deadline: null quando a data ou prazo nao estiver explicito no texto.
+- affected_activities / affected_entities: listas curtas e especificas.
+- obligations: apenas obrigacoes concretas; deixe vazio se o documento for so noticia ou pesquisa.
+- recommendations: acoes de triagem inicial, nao aconselhamento juridico definitivo.
+- keywords: ate 8 termos.
+- impact_score: entre 0 e 1; reduza se nao houver obrigacoes concretas.
+- impact_areas: quando aplicavel, use termos como Compliance, Tecnologia, Operacional, Juridico, Produtos, Risco.
+- confidence_scores: confianca (0 a 1) da propria extracao para cada bloco.
 
 Documento:
 \"\"\"
